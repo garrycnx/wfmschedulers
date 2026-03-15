@@ -34,9 +34,23 @@ jobs:
       - name: Prepare deployment package
         working-directory: frontend
         run: |
-          # Copy package.json and lock file so Azure can run "npm start"
-          cp package.json dist/
-          cp package-lock.json dist/
+          # Create a minimal package.json inside dist (no "type:module" which confuses Azure)
+          cat > dist/package.json << 'EOF'
+          {
+            "name": "wfm-club-frontend",
+            "version": "1.0.0",
+            "scripts": {
+              "start": "node node_modules/serve/build/main.js -s . -l 8080"
+            },
+            "dependencies": {
+              "serve": "^14.2.1"
+            }
+          }
+          EOF
+
+          # Install only serve into dist/node_modules
+          cd dist
+          npm install --omit=dev
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -56,9 +70,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
-
-      - name: Install serve for production
-        run: npm ci --omit=dev
 
       - name: Login to Azure
         uses: azure/login@v2
