@@ -1,12 +1,21 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useGoogleLogin } from '@react-oauth/google'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import axios from 'axios'
 import { useAuthStore } from '../../store/authStore'
 import { apiClient } from '../../api/client'
 import type { User } from '../../types'
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
+
+// Only import useGoogleLogin when a client ID is available
+function useGoogleLoginSafe() {
+  if (!GOOGLE_CLIENT_ID) return null
+  // eslint-disable-next-line
+  const { useGoogleLogin } = require('@react-oauth/google')
+  return useGoogleLogin
+}
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -16,47 +25,53 @@ export default function LoginPage() {
     if (isAuthenticated) navigate('/dashboard', { replace: true })
   }, [isAuthenticated, navigate])
 
-  const login = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      const toastId = toast.loading('Signing you in…')
-      try {
-        // Try backend first (when it's running)
-        const res = await apiClient.post<{ user: User; token: string }>(
-          '/auth/google',
-          { access_token: tokenResponse.access_token },
-        )
-        setAuth(res.data.user, res.data.token)
-        toast.dismiss(toastId)
-        toast.success(`Welcome back, ${res.data.user.name.split(' ')[0]}!`)
-        navigate(res.data.user.role === 'agent' ? '/agent-portal' : '/dashboard', { replace: true })
-      } catch {
-        // Backend not running – fetch Google profile directly (frontend-only mode)
-        try {
-          const profile = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
-            headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-          })
-          const g = profile.data as { id: string; email: string; name: string; picture: string }
-          const user: User = {
-            id: g.id,
-            email: g.email,
-            name: g.name,
-            picture: g.picture,
-            role: 'manager',
-            createdAt: new Date().toISOString(),
+  // Only wire up Google login when the OAuth client ID is configured
+  const googleLoginHook = GOOGLE_CLIENT_ID
+    ? (() => {
+        // Dynamic require to avoid hook being called when no client ID
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { useGoogleLogin } = require('@react-oauth/google')
+        return useGoogleLogin
+      })()
+    : null
+
+  const login = googleLoginHook
+    ? googleLoginHook({
+        onSuccess: async (tokenResponse: { access_token: string }) => {
+          const toastId = toast.loading('Signing you in…')
+          try {
+            const res = await apiClient.post<{ user: User; token: string }>(
+              '/auth/google',
+              { access_token: tokenResponse.access_token },
+            )
+            setAuth(res.data.user, res.data.token)
+            toast.dismiss(toastId)
+            toast.success(`Welcome back, ${res.data.user.name.split(' ')[0]}!`)
+            navigate(res.data.user.role === 'agent' ? '/agent-portal' : '/dashboard', { replace: true })
+          } catch {
+            try {
+              const profile = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
+                headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+              })
+              const g = profile.data as { id: string; email: string; name: string; picture: string }
+              const user: User = {
+                id: g.id, email: g.email, name: g.name, picture: g.picture,
+                role: 'manager', createdAt: new Date().toISOString(),
+              }
+              setAuth(user, `demo-token-${g.id}`)
+              toast.dismiss(toastId)
+              toast.success(`Welcome, ${g.name.split(' ')[0]}!`)
+              navigate('/dashboard', { replace: true })
+            } catch {
+              toast.dismiss(toastId)
+              toast.error('Sign-in failed. Please try again.')
+            }
           }
-          setAuth(user, `demo-token-${g.id}`)
-          toast.dismiss(toastId)
-          toast.success(`Welcome, ${g.name.split(' ')[0]}!`)
-          navigate('/dashboard', { replace: true })
-        } catch {
-          toast.dismiss(toastId)
-          toast.error('Sign-in failed. Please try again.')
-        }
-      }
-    },
-    onError: () => toast.error('Google sign-in was cancelled.'),
-    scope: 'openid email profile',
-  })
+        },
+        onError: () => toast.error('Google sign-in was cancelled.'),
+        scope: 'openid email profile',
+      })
+    : null
 
   return (
     <div className="login-bg min-h-screen flex items-center justify-center p-4">
@@ -100,15 +115,23 @@ export default function LoginPage() {
           </p>
 
           {/* Google button */}
-          <button
-            onClick={() => login()}
-            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-800
-                       font-semibold rounded-xl px-5 py-3.5 text-sm transition-all duration-200
-                       shadow-md hover:shadow-lg active:scale-[0.98]"
-          >
-            <GoogleIcon />
-            Continue with Google
-          </button>
+          {login ? (
+            <button
+              onClick={() => login()}
+              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-800
+                         font-semibold rounded-xl px-5 py-3.5 text-sm transition-all duration-200
+                         shadow-md hover:shadow-lg active:scale-[0.98]"
+            >
+              <GoogleIcon />
+              Continue with Google
+            </button>
+          ) : (
+            <div className="w-full flex items-center justify-center gap-3 bg-white/10 text-slate-400
+                            rounded-xl px-5 py-3.5 text-sm border border-white/10">
+              <GoogleIcon />
+              Google sign-in not configured
+            </div>
+          )}
 
           <div className="mt-6 flex items-center gap-3">
             <div className="h-px flex-1 bg-white/10" />
