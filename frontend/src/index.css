@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --scrollbar-thumb: #cbd5e1;
+    --scrollbar-track: #f1f5f9;
+  }
+  * { box-sizing: border-box; }
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body { @apply bg-gray-50 text-gray-900 min-h-screen; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+}
+
+@layer components {
+  .card       { @apply bg-white border border-gray-200 rounded-2xl shadow-sm; }
+  .card-glass { @apply bg-white/90 backdrop-blur-sm border border-gray-200 rounded-2xl shadow-md; }
+
+  .input {
+    @apply w-full bg-white border border-gray-300 rounded-xl px-4 py-2.5
+           text-gray-900 placeholder-gray-400 text-sm
+           focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500
+           transition-all duration-200;
+  }
+  .label { @apply block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5; }
+
+  .badge        { @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold; }
+  .badge-brand  { @apply badge bg-brand-50 text-brand-700 border border-brand-200; }
+  .badge-green  { @apply badge bg-emerald-50 text-emerald-700 border border-emerald-200; }
+  .badge-red    { @apply badge bg-red-50 text-red-700 border border-red-200; }
+  .badge-yellow { @apply badge bg-amber-50 text-amber-700 border border-amber-200; }
+  .badge-slate  { @apply badge bg-gray-100 text-gray-600 border border-gray-200; }
+
+  .skeleton { @apply bg-gradient-to-r from-gray-100 via-gray-200 to-gray-100 bg-[length:200%_100%] animate-shimmer rounded-lg; }
+
+  .step-active   { @apply bg-brand-600 text-white border-brand-500; }
+  .step-complete { @apply bg-emerald-50 text-emerald-700 border-emerald-300; }
+  .step-pending  { @apply bg-gray-100 text-gray-400 border-gray-200; }
+
+  /* Table */
+  .wfm-table th {
+    @apply bg-gray-50 text-gray-500 text-xs font-semibold uppercase tracking-wider
+           px-4 py-3 border-b border-gray-200;
+  }
+  .wfm-table td { @apply px-4 py-3 text-sm text-gray-800 border-b border-gray-100; }
+  .wfm-table tr:last-child td { border-bottom: none; }
+  .wfm-table tr:hover td { @apply bg-gray-50/80; }
+  .wfm-table tr.total-row td { @apply bg-brand-50 font-bold text-brand-800 border-t-2 border-brand-200; }
+}
+
+/* Recharts */
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line { stroke: #e2e8f0 !important; }
+.recharts-text { fill: #64748b !important; }
+.recharts-legend-item-text { color: #64748b !important; }
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,.08) !important;
+  color: #1e293b !important;
+}
+
+.login-bg {
+  background: radial-gradient(ellipse 80% 60% at 50% -10%, #e0e7ff55, transparent), #f8fafc;
+}
+
+@keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+.animate-fade-in  { animation: fadeIn  0.3s ease-out; }
+.animate-slide-in { animation: slideIn 0.3s ease-out; }
