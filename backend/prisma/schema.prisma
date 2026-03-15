@@ -1,10 +1,10 @@
-// Prisma schema for WFM Club – deployable to Azure SQL Database
+// Prisma schema for WFM Club – Azure PostgreSQL Flexible Server
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlserver"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -21,19 +21,19 @@ model Organization {
 }
 
 model User {
-  id             String       @id @default(cuid())
-  email          String       @unique
+  id             String        @id @default(cuid())
+  email          String        @unique
   name           String
   picture        String?
-  googleId       String?      @unique
-  role           String       @default("manager")  // admin | manager | agent
+  googleId       String?       @unique
+  role           String        @default("manager")  // admin | manager | agent
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id])
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  agent          Agent?       // if this user IS an agent
-  sessions       Session[]
+  agent    Agent?    // if this user IS an agent
+  sessions Session[]
 }
 
 model Session {
@@ -51,13 +51,13 @@ model Agent {
   name           String
   email          String
   phone          String?
-  status         String   @default("active")   // active | inactive | on_leave
-  skill          String   @default("mid")       // junior | mid | senior | lead
+  status         String   @default("active")  // active | inactive | on_leave
+  skill          String   @default("mid")     // junior | mid | senior | lead
   team           String?
   hireDate       DateTime
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
-  userId         String?  @unique               // portal login
+  userId         String?  @unique             // portal login
   user           User?    @relation(fields: [userId], references: [id])
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -68,24 +68,24 @@ model Agent {
 }
 
 model Schedule {
-  id             String   @id @default(cuid())
-  name           String
-  weekStartDate  DateTime
-  status         String   @default("draft")    // draft | published | archived
-  settingsJson   String   @db.NVarChar(Max)     // JSON blob of ScheduleSettings
-  forecastJson   String   @db.NVarChar(Max)
-  requiredJson   String   @db.NVarChar(Max)
-  agentsJson     String   @db.NVarChar(Max)
-  projectionsJson String  @db.NVarChar(Max)
-  rosterJson     String   @db.NVarChar(Max)
-  breaksJson     String   @db.NVarChar(Max)
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  createdBy      String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default(cuid())
+  name            String
+  weekStartDate   DateTime
+  status          String   @default("draft")  // draft | published | archived
+  settingsJson    String   @db.Text            // JSON blob of ScheduleSettings
+  forecastJson    String   @db.Text
+  requiredJson    String   @db.Text
+  agentsJson      String   @db.Text
+  projectionsJson String   @db.Text
+  rosterJson      String   @db.Text
+  breaksJson      String   @db.Text
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  agentEntries   AgentScheduleEntry[]
+  agentEntries AgentScheduleEntry[]
 }
 
 // Denormalized per-agent per-week schedule for the agent portal
@@ -95,7 +95,7 @@ model AgentScheduleEntry {
   schedule   Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
   agentId    String
   agent      Agent    @relation(fields: [agentId], references: [id])
-  entryJson  String   @db.NVarChar(Max)   // JSON of one agent's week schedule + breaks
+  entryJson  String   @db.Text  // JSON of one agent's week schedule + breaks
   createdAt  DateTime @default(now())
 
   @@unique([scheduleId, agentId])

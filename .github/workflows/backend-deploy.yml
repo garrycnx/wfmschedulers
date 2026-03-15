@@ -36,9 +36,9 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      - name: Push database schema to Azure SQL
+      - name: Push database schema to Azure PostgreSQL
         working-directory: backend
-        run: npx prisma db push --skip-generate --accept-data-loss
+        run: npx prisma db push --skip-generate
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
