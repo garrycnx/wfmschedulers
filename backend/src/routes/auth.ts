@@ -27,6 +27,10 @@ router.post('/google', async (req: Request, res: Response) => {
     // Upsert user
     let user = await prisma.user.findUnique({ where: { googleId: profile.id } })
     if (!user) {
+      // Auto-create an Organisation for every new sign-up
+      const org = await prisma.organization.create({
+        data: { name: `${profile.name}'s Workspace` },
+      })
       user = await prisma.user.create({
         data: {
           email: profile.email,
@@ -34,13 +38,25 @@ router.post('/google', async (req: Request, res: Response) => {
           picture: profile.picture,
           googleId: profile.id,
           role: 'manager',
+          organizationId: org.id,
         },
       })
     } else {
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: { name: profile.name, picture: profile.picture },
-      })
+      // Ensure existing users without an org get one retroactively
+      if (!user.organizationId) {
+        const org = await prisma.organization.create({
+          data: { name: `${user.name}'s Workspace` },
+        })
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { organizationId: org.id },
+        })
+      } else {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { name: profile.name, picture: profile.picture },
+        })
+      }
     }
 
     // Sign JWT

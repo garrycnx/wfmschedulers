@@ -1,11 +1,70 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, Plus, Archive, Download, Trash2, CalendarDays, Users, TrendingUp } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useScheduleStore } from '../store/scheduleStore'
+import { schedulesApi } from '../api/client'
+import type { DayProjection } from '../types'
 
+// ─── Unified display shape ────────────────────────────────────────────────────
+interface DisplayEntry {
+  id: string
+  releasedAt: string
+  range: { from: string; to: string }
+  agentCount: number
+  projections: DayProjection[]
+  status: 'released' | 'archived'
+  source: 'backend' | 'local'
+}
+
+// ─── Map the backend Schedule shape → DisplayEntry ────────────────────────────
+function fromBackend(s: {
+  id: string
+  name: string
+  weekStartDate: string
+  status: string
+  createdAt: string
+  settingsJson?: string
+  agentsJson?: string
+  projectionsJson?: string
+}): DisplayEntry {
+  let from = (s.weekStartDate ?? '').split('T')[0]
+  let to = from
+  let agentCount = 0
+  const projections: DayProjection[] = []
+
+  try {
+    const settings = JSON.parse(s.settingsJson ?? '{}')
+    if (settings.releaseFrom) from = settings.releaseFrom
+    if (settings.releaseTo) to = settings.releaseTo
+  } catch { /* ignore */ }
+
+  try {
+    const agents = JSON.parse(s.agentsJson ?? '[]')
+    agentCount = Array.isArray(agents) ? agents.length : 0
+  } catch { /* ignore */ }
+
+  try {
+    const parsed = JSON.parse(s.projectionsJson ?? '[]')
+    if (Array.isArray(parsed)) projections.push(...parsed)
+  } catch { /* ignore */ }
+
+  return {
+    id: s.id,
+    releasedAt: s.createdAt,
+    range: { from, to },
+    agentCount,
+    projections,
+    status: s.status === 'archived' ? 'archived' : 'released',
+    source: 'backend',
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDate(iso: string) {
+  if (!iso) return '—'
   const [y, m, d] = iso.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('en-GB', {
     day: 'numeric', month: 'short', year: 'numeric',
@@ -24,19 +83,41 @@ const statusStyle: Record<string, string> = {
   archived: 'badge-slate',
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
 export default function ScheduleHistory() {
   const navigate = useNavigate()
   const { releaseHistory, archiveHistoryEntry, deleteHistoryEntry } = useScheduleStore()
   const [search, setSearch] = useState('')
 
-  const filtered = releaseHistory.filter((e) => {
+  // Try to fetch from backend (silent – falls back to localStorage if unavailable)
+  const { data: backendSchedules } = useQuery({
+    queryKey: ['schedules'],
+    queryFn: () =>
+      schedulesApi.list().then((r) =>
+        (r.data as Parameters<typeof fromBackend>[0][]).map(fromBackend),
+      ),
+    staleTime: 30_000,
+    // Don't surface network errors to the user
+    retry: 1,
+  })
+
+  // Convert localStorage entries to the same shape for the fallback
+  const localEntries: DisplayEntry[] = releaseHistory.map((e) => ({
+    ...e,
+    source: 'local' as const,
+  }))
+
+  // Prefer backend data; fall back to localStorage if backend has nothing yet
+  const allEntries: DisplayEntry[] =
+    backendSchedules && backendSchedules.length > 0 ? backendSchedules : localEntries
+
+  const filtered = allEntries.filter((e) => {
     const rangeStr = `${fmtDate(e.range.from)} – ${fmtDate(e.range.to)}`
     return rangeStr.toLowerCase().includes(search.toLowerCase())
   })
 
-  function handleExport(id: string) {
-    const entry = releaseHistory.find((e) => e.id === id)
-    if (!entry) return
+  // ── Actions ────────────────────────────────────────────────────────────────
+  function handleExport(entry: DisplayEntry) {
     const data = JSON.stringify(entry, null, 2)
     const blob = new Blob([data], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -46,6 +127,34 @@ export default function ScheduleHistory() {
     a.click()
     URL.revokeObjectURL(url)
     toast.success('Schedule exported.')
+  }
+
+  async function handleArchive(entry: DisplayEntry) {
+    if (entry.source === 'backend') {
+      try {
+        await schedulesApi.archive(entry.id)
+        toast.success('Schedule archived.')
+      } catch {
+        toast.error('Failed to archive. Please try again.')
+      }
+    } else {
+      archiveHistoryEntry(entry.id)
+      toast.success('Schedule archived.')
+    }
+  }
+
+  async function handleDelete(entry: DisplayEntry) {
+    if (entry.source === 'backend') {
+      try {
+        await schedulesApi.delete(entry.id)
+        toast.success('Entry removed from history.')
+      } catch {
+        toast.error('Failed to delete. Please try again.')
+      }
+    } else {
+      deleteHistoryEntry(entry.id)
+      toast.success('Entry removed from history.')
+    }
   }
 
   return (
@@ -110,7 +219,7 @@ export default function ScheduleHistory() {
                     </div>
                   </div>
 
-                  {/* KPIs – only if projections exist */}
+                  {/* KPIs */}
                   {proj && (
                     <div className="flex items-center gap-4 text-sm shrink-0">
                       <div className="text-center">
@@ -142,7 +251,7 @@ export default function ScheduleHistory() {
                   {/* Actions */}
                   <div className="flex items-center gap-1 shrink-0">
                     <button
-                      onClick={() => handleExport(entry.id)}
+                      onClick={() => handleExport(entry)}
                       className="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"
                       title="Export JSON"
                     >
@@ -151,10 +260,7 @@ export default function ScheduleHistory() {
 
                     {entry.status !== 'archived' && (
                       <button
-                        onClick={() => {
-                          archiveHistoryEntry(entry.id)
-                          toast.success('Schedule archived.')
-                        }}
+                        onClick={() => handleArchive(entry)}
                         className="p-2 rounded-xl text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-all"
                         title="Archive"
                       >
@@ -163,10 +269,7 @@ export default function ScheduleHistory() {
                     )}
 
                     <button
-                      onClick={() => {
-                        deleteHistoryEntry(entry.id)
-                        toast.success('Entry removed from history.')
-                      }}
+                      onClick={() => handleDelete(entry)}
                       className="p-2 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"
                       title="Delete"
                     >

@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import Papa from 'papaparse'
 import { Check, ChevronRight, Loader2, Send, Unlock, Lock } from 'lucide-react'
 import { useScheduleStore } from '../store/scheduleStore'
+import { schedulesApi } from '../api/client'
 import SettingsPanel from '../components/scheduling/SettingsPanel'
 import ForecastUpload from '../components/scheduling/ForecastUpload'
 import StaffingChart from '../components/scheduling/StaffingChart'
@@ -375,11 +376,28 @@ export default function ScheduleGenerator() {
                   />
                 </div>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (!releaseFrom || !releaseTo) { toast.error('Select a date range first.'); return }
                     if (releaseTo < releaseFrom) { toast.error('End date must be after start date.'); return }
                     store.releaseSchedule({ from: releaseFrom, to: releaseTo })
                     toast.success('✅ Schedule released! Agents can now view their shifts.')
+                    // Persist to backend (silent fallback – localStorage already saved it)
+                    try {
+                      const saved = await schedulesApi.save({
+                        name: `${releaseFrom} → ${releaseTo}`,
+                        weekStartDate: releaseFrom,
+                        settingsJson: JSON.stringify({ ...store.settings, releaseFrom, releaseTo }),
+                        forecastJson: JSON.stringify(store.forecastRows),
+                        requiredJson: JSON.stringify(store.requiredStaff),
+                        agentsJson: JSON.stringify(store.agents),
+                        projectionsJson: JSON.stringify(store.projections),
+                        rosterJson: JSON.stringify(store.rosterRows),
+                        breaksJson: JSON.stringify(store.breakRows),
+                      })
+                      await schedulesApi.publish(saved.data.id)
+                    } catch {
+                      // Backend not yet connected – data is still safe in localStorage
+                    }
                   }}
                   className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white
                              font-semibold rounded-xl px-4 py-2 text-sm transition-all shadow-sm whitespace-nowrap"

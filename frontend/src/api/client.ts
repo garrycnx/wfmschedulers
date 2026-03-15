@@ -2,8 +2,12 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore'
 
+// In dev the Vite proxy forwards /api → localhost:5000 (no VITE_API_URL needed).
+// In production set VITE_API_URL=https://wfmschedulers-api.azurewebsites.net
+const API_BASE = `${import.meta.env.VITE_API_URL ?? ''}/api`
+
 export const apiClient = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE,
   timeout: 30_000,
   headers: { 'Content-Type': 'application/json' },
 })
