@@ -19,10 +19,20 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
 
       setAuth: (user, token) =>
-        set({ user, token, isAuthenticated: true }),
+        set((state) => {
+          // If a DIFFERENT user is logging in, wipe their previous store data
+          if (state.user && state.user.id !== user.id) {
+            localStorage.removeItem('wfm-schedule')
+            localStorage.removeItem(`wfm-schedule-${state.user.id}`)
+          }
+          return { user, token, isAuthenticated: true }
+        }),
 
-      logout: () =>
-        set({ user: null, token: null, isAuthenticated: false }),
+      logout: () => {
+        // Clear schedule data on logout so next user starts fresh
+        localStorage.removeItem('wfm-schedule')
+        set({ user: null, token: null, isAuthenticated: false })
+      },
 
       updateUser: (partial) =>
         set((state) => ({

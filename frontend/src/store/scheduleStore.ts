@@ -202,7 +202,16 @@ export const useScheduleStore = create<ScheduleState>()(
         }),
     }),
     {
-      name: 'wfm-schedule',   // localStorage key
+      // Scope storage key to the logged-in user so accounts never share data
+      name: (() => {
+        try {
+          const auth = JSON.parse(localStorage.getItem('wfm-auth') ?? '{}')
+          const userId = auth?.state?.user?.id
+          return userId ? `wfm-schedule-${userId}` : 'wfm-schedule'
+        } catch {
+          return 'wfm-schedule'
+        }
+      })(),
       // Only persist what the agent portal needs; skip large/transient data
       partialize: (state) => ({
         settings:         state.settings,
