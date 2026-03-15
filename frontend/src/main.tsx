@@ -43,9 +43,9 @@ const AppTree = (
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {GOOGLE_CLIENT_ID
-      ? <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>{AppTree}</GoogleOAuthProvider>
-      : AppTree
-    }
+    {/* Always render GoogleOAuthProvider — button is hidden when clientId is empty */}
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID || 'not-configured'}>
+      {AppTree}
+    </GoogleOAuthProvider>
   </React.StrictMode>,
 )
