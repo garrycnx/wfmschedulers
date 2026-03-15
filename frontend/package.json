@@ -7,10 +7,12 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint src --ext ts,tsx"
+    "lint": "eslint src --ext ts,tsx",
+    "start": "serve -s dist -l 8080"
   },
   "dependencies": {
     "@react-oauth/google": "^0.12.1",
+    "serve": "^14.2.1",
     "@tanstack/react-query": "^5.17.0",
     "axios": "^1.6.5",
     "clsx": "^2.1.0",
