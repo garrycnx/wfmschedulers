@@ -30,6 +30,8 @@ jobs:
       - name: Build Vite app
         working-directory: frontend
         run: npm run build
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
 
       - name: Prepare deployment package
         working-directory: frontend
