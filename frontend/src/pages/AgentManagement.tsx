@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Plus, Edit2, Trash2, Send } from 'lucide-react'
+import { Search, Plus, Edit2, Trash2, Send, CalendarDays } from 'lucide-react'
 import toast from 'react-hot-toast'
-import type { AgentFormData, AgentStatus, SkillLevel } from '../types'
+import type { Agent, AgentFormData, AgentStatus, SkillLevel } from '../types'
 import AgentModal from '../components/agents/AgentModal'
+import ShiftCalendarModal from '../components/agents/ShiftCalendarModal'
 import { useAgentStore } from '../store/agentStore'
 import { useScheduleStore } from '../store/scheduleStore'
 import { minToTime } from '../utils/scheduleEngine'
@@ -32,6 +33,7 @@ export default function AgentManagement() {
   const [statusFilter, setStatusFilter] = useState<AgentStatus | 'all'>('all')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null)
+  const [calendarAgent, setCalendarAgent] = useState<Agent | null>(null)
 
   const editingAgent = editingAgentId ? agents.find((a) => a.id === editingAgentId) ?? null : null
 
@@ -232,9 +234,16 @@ export default function AgentManagement() {
                         <button
                           onClick={() => { setEditingAgentId(agent.id); setModalOpen(true) }}
                           className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"
-                          title="Edit"
+                          title="Edit agent"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setCalendarAgent(agent)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-brand-50 transition-all"
+                          title="Shift calendar – set day-specific shifts"
+                        >
+                          <CalendarDays className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleInvite(agent.email)}
@@ -280,6 +289,13 @@ export default function AgentManagement() {
         agent={editingAgent}
         onClose={() => { setModalOpen(false); setEditingAgentId(null) }}
         onSave={handleSave}
+      />
+
+      {/* Shift calendar modal */}
+      <ShiftCalendarModal
+        open={!!calendarAgent}
+        agent={calendarAgent}
+        onClose={() => setCalendarAgent(null)}
       />
     </div>
   )

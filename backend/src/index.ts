@@ -10,6 +10,7 @@ import authRouter from './routes/auth'
 import agentsRouter from './routes/agents'
 import schedulesRouter from './routes/schedules'
 import portalRouter from './routes/portal'
+import overridesRouter from './routes/overrides'
 import { errorHandler } from './middleware/errorHandler'
 
 const app = express()
@@ -35,6 +36,7 @@ app.use('/api/', limiter)
 // ─── Routes ──────────────────────────────────────────────────────────────────
 app.use('/api/auth',      authRouter)
 app.use('/api/agents',    agentsRouter)
+app.use('/api/agents',    overridesRouter)   // shift day overrides: /api/agents/:id/overrides
 app.use('/api/schedules', schedulesRouter)
 app.use('/api/portal',    portalRouter)   // public – no auth required
 

@@ -63,8 +63,26 @@ model Agent {
   updatedAt      DateTime @updatedAt
 
   agentSchedules AgentScheduleEntry[]
+  shiftOverrides ShiftDayOverride[]
 
   @@unique([agentCode, organizationId])
+}
+
+// Per-agent per-day shift override (e.g. "Sandra works 10:00–19:00 on 20 Mar")
+model ShiftDayOverride {
+  id             String   @id @default(cuid())
+  agentId        String
+  agent          Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  overrideDate   DateTime // stored as UTC midnight for the day
+  shiftStart     String?  // "09:00" – null when isOff=true
+  shiftEnd       String?  // "18:00" – null when isOff=true
+  isOff          Boolean  @default(false)
+  note           String?
+  organizationId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([agentId, overrideDate])
 }
 
 model Schedule {
