@@ -50,7 +50,7 @@ jobs:
             "version": "1.0.0",
             "scripts": {
               "start": "node index.js",
-              "postinstall": "prisma generate && prisma db push --skip-generate"
+              "postinstall": "prisma generate"
             },
             "dependencies": {
               "prisma": "^5.8.0",
