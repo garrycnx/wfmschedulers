@@ -35,7 +35,9 @@ export default function AgentModal({ open, agent, onClose, onSave }: Props) {
         phone: agent.phone ?? '',
         skill: agent.skill,
         team: agent.team ?? '',
-        hireDate: agent.hireDate,
+        hireDate: agent.hireDate
+          ? new Date(agent.hireDate).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0],
         status: agent.status,
         employeeCode: agent.agentCode,
         password: '',          // blank = keep existing password
@@ -51,7 +53,7 @@ export default function AgentModal({ open, agent, onClose, onSave }: Props) {
     const e: Partial<AgentFormData> = {}
     if (!form.name.trim()) e.name = 'Name is required'
     if (!form.email.trim() || !/\S+@\S+\.\S+/.test(form.email)) e.email = 'Valid email required'
-    if (!agent && !form.employeeCode?.trim()) e.employeeCode = 'Employee ID is required'
+    if (!form.employeeCode?.trim()) e.employeeCode = 'Employee ID is required'
     if (form.employeeCode?.trim() && !/^[A-Za-z0-9_-]+$/.test(form.employeeCode.trim()))
       e.employeeCode = 'Only letters, numbers, hyphens and underscores allowed'
     setErrors(e)
@@ -124,7 +126,6 @@ export default function AgentModal({ open, agent, onClose, onSave }: Props) {
                         value={form.employeeCode}
                         onChange={set('employeeCode')}
                         placeholder="e.g. AG007"
-                        disabled={!!agent}           // can't rename existing agent's ID
                       />
                       {errors.employeeCode
                         ? <p className="text-xs text-red-500 mt-1">{errors.employeeCode}</p>

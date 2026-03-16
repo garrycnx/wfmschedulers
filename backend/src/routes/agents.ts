@@ -67,10 +67,40 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
 // PUT /api/agents/:id
 router.put('/:id', async (req: AuthRequest, res: Response) => {
-  const data = AgentSchema.parse(req.body)
+  const UpdateSchema = AgentSchema.extend({ hireDate: z.string().optional() })
+  const data = UpdateSchema.parse(req.body)
+  const { hireDate, employeeCode, ...rest } = data
+  const orgId = req.user!.organizationId ?? 'default'
+
+  // If employee ID is being changed, check it's not taken by another agent
+  if (employeeCode?.trim()) {
+    const newCode = employeeCode.trim().toUpperCase()
+    const conflict = await prisma.agent.findFirst({
+      where: { agentCode: newCode, organizationId: orgId, NOT: { id: req.params.id } },
+    })
+    if (conflict) {
+      return res.status(409).json({
+        error: `Employee ID "${newCode}" is already assigned to ${conflict.name}. Please use a different ID.`,
+      })
+    }
+    // Update including the new agentCode
+    const agent = await prisma.agent.update({
+      where: { id: req.params.id },
+      data: {
+        ...rest,
+        agentCode: newCode,
+        ...(hireDate ? { hireDate: new Date(hireDate) } : {}),
+      },
+    })
+    return res.json(agent)
+  }
+
   const agent = await prisma.agent.update({
     where: { id: req.params.id },
-    data: { ...data, hireDate: new Date(data.hireDate) },
+    data: {
+      ...rest,
+      ...(hireDate ? { hireDate: new Date(hireDate) } : {}),
+    },
   })
   res.json(agent)
 })
