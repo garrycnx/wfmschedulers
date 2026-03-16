@@ -1,0 +1,78 @@
+import { Router, Request, Response } from 'express'
+import { prisma } from '../config/database'
+
+const router = Router()
+
+// POST /api/portal/login – agent login (public, no auth required)
+router.post('/login', async (req: Request, res: Response) => {
+  try {
+    const { agentCode } = req.body as { agentCode?: string }
+    if (!agentCode?.trim()) {
+      return res.status(400).json({ error: 'Employee ID is required.' })
+    }
+    const agent = await prisma.agent.findFirst({
+      where: { agentCode: { equals: agentCode.trim().toUpperCase(), mode: 'insensitive' } },
+    })
+    if (!agent) {
+      return res.status(404).json({ error: 'Employee ID not found. Please check and try again.' })
+    }
+    if (agent.status === 'inactive') {
+      return res.status(403).json({ error: 'Your account is inactive. Contact your manager.' })
+    }
+    return res.json({ success: true, agent: { id: agent.id, name: agent.name, agentCode: agent.agentCode } })
+  } catch {
+    return res.status(500).json({ error: 'Internal server error.' })
+  }
+})
+
+// GET /api/portal/schedule/:agentCode – released schedule for an agent (public)
+router.get('/schedule/:agentCode', async (req: Request, res: Response) => {
+  try {
+    const agent = await prisma.agent.findFirst({
+      where: { agentCode: { equals: req.params.agentCode.trim().toUpperCase(), mode: 'insensitive' } },
+    })
+    if (!agent) return res.status(404).json({ error: 'Agent not found.' })
+
+    // Latest published schedule for this org
+    const schedule = await prisma.schedule.findFirst({
+      where: { organizationId: agent.organizationId, status: 'published' },
+      orderBy: { updatedAt: 'desc' },
+    })
+    if (!schedule) return res.json({ released: false })
+
+    // Parse agentsJson to find this agent's slot ID (agentId merged in at save time)
+    const scheduledAgents = JSON.parse(schedule.agentsJson) as Array<{
+      id: string; agentId?: string; start: number; end: number; off: string[]
+    }>
+    const slot = scheduledAgents.find(a => a.agentId === agent.id)
+
+    // Parse release range from settingsJson (saved as releaseFrom / releaseTo)
+    const settings = JSON.parse(schedule.settingsJson) as { releaseFrom?: string; releaseTo?: string }
+    const weekStart = schedule.weekStartDate.toISOString().split('T')[0]
+    const releaseRange = {
+      from: settings.releaseFrom ?? weekStart,
+      to:   settings.releaseTo  ?? weekStart,
+    }
+
+    const rosterRows = JSON.parse(schedule.rosterJson) as Array<Record<string, string>>
+    const breakRows  = JSON.parse(schedule.breaksJson)  as Array<Record<string, string>>
+
+    const myRosterRow = slot
+      ? (rosterRows.find(r => r.agent === slot.id) ?? rosterRows[0] ?? null)
+      : (rosterRows[0] ?? null)
+    const myBreakRow = slot
+      ? (breakRows.find(r => r.agent === slot.id) ?? breakRows[0] ?? null)
+      : (breakRows[0] ?? null)
+
+    return res.json({
+      released: true,
+      releaseRange,
+      rosterRow: myRosterRow,
+      breakRow:  myBreakRow,
+    })
+  } catch {
+    return res.status(500).json({ error: 'Internal server error.' })
+  }
+})
+
+export default router

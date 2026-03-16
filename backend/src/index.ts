@@ -9,6 +9,7 @@ import rateLimit from 'express-rate-limit'
 import authRouter from './routes/auth'
 import agentsRouter from './routes/agents'
 import schedulesRouter from './routes/schedules'
+import portalRouter from './routes/portal'
 import { errorHandler } from './middleware/errorHandler'
 
 const app = express()
@@ -32,6 +33,7 @@ app.use('/api/', limiter)
 app.use('/api/auth',      authRouter)
 app.use('/api/agents',    agentsRouter)
 app.use('/api/schedules', schedulesRouter)
+app.use('/api/portal',    portalRouter)   // public – no auth required
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }))
 

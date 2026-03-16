@@ -1,13 +1,21 @@
 import { useState } from 'react'
+import axios from 'axios'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import {
   CalendarDays, Clock, Coffee, Utensils, LogOut,
   Sun, ChevronLeft, ChevronRight, Info, KeyRound, Eye, EyeOff, AlertCircle,
 } from 'lucide-react'
-import { useScheduleStore } from '../store/scheduleStore'
-import { useAgentStore } from '../store/agentStore'
 import type { RosterRow, BreakRow } from '../types'
+
+const PORTAL_API = `${import.meta.env.VITE_API_URL ?? ''}/api/portal`
+
+interface PortalData {
+  released: boolean
+  releaseRange: { from: string; to: string } | null
+  rosterRow: RosterRow | null
+  breakRow: BreakRow | null
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface DayEntry {
@@ -334,61 +342,52 @@ export default function AgentPortal() {
   const [loginError,   setLoginError]   = useState('')
   const [isLoggingIn,  setIsLoggingIn]  = useState(false)
 
-  const { released, releaseRange, rosterRows, breakRows, agentAssignments } = useScheduleStore()
-  const { agents: realAgents } = useAgentStore()
+  const [portalData, setPortalData] = useState<PortalData | null>(null)
 
-  function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoginError('')
     if (!empId.trim()) { setLoginError('Employee ID is required.'); return }
     if (!password)     { setLoginError('Password is required.'); return }
 
     setIsLoggingIn(true)
-    // Simulate async auth check (in prod this hits the backend)
-    setTimeout(() => {
-      // Look up agent by employee code (case-insensitive)
-      const agent = realAgents.find(
-        a => a.agentCode.toLowerCase() === empId.trim().toLowerCase()
-      )
-      if (!agent) {
-        setLoginError('Employee ID not found. Please check and try again.')
-        setIsLoggingIn(false)
-        return
+    try {
+      // Step 1: Verify agent code against backend
+      const loginRes = await axios.post(`${PORTAL_API}/login`, { agentCode: empId.trim() })
+      const { agent } = loginRes.data
+
+      // Step 2: Fetch the released schedule for this agent
+      const schedRes = await axios.get(`${PORTAL_API}/schedule/${agent.agentCode}`)
+      const data: PortalData = {
+        released:     schedRes.data.released ?? false,
+        releaseRange: schedRes.data.releaseRange ?? null,
+        rosterRow:    schedRes.data.rosterRow ?? null,
+        breakRow:     schedRes.data.breakRow ?? null,
       }
-      if (agent.status === 'inactive') {
-        setLoginError('Your account is inactive. Contact your manager.')
-        setIsLoggingIn(false)
-        return
-      }
-      // Password check: mock — accept 'password' or any non-empty string (real check is backend)
-      if (!password) {
-        setLoginError('Incorrect password. Please try again.')
-        setIsLoggingIn(false)
-        return
-      }
+      setPortalData(data)
       setLoggedIn(true)
       setAgentName(agent.name)
       setAgentCode(agent.agentCode)
-      setIsLoggingIn(false)
       toast.success(`Welcome back, ${agent.name.split(' ')[0]}!`)
-    }, 600)
+    } catch (err: unknown) {
+      const msg =
+        axios.isAxiosError(err) && err.response?.data?.error
+          ? (err.response.data.error as string)
+          : 'Login failed. Please try again.'
+      setLoginError(msg)
+    } finally {
+      setIsLoggingIn(false)
+    }
   }
 
-  // ── Resolve this agent's roster & break rows ─────────────────────────────────
-  const myAgent   = realAgents.find(a => a.agentCode === agentCode)
-  const mySlotId  = myAgent
-    ? Object.keys(agentAssignments).find(slotId => agentAssignments[slotId] === myAgent.id)
-    : undefined
-  // Prefer assigned slot; fall back to first available row (demo)
-  const myRosterRow: RosterRow | null = mySlotId
-    ? (rosterRows.find(r => r.agent === mySlotId) ?? rosterRows[0] ?? null)
-    : (rosterRows[0] ?? null)
-  const myBreakRow: BreakRow | null = mySlotId
-    ? (breakRows.find(r => r.agent === mySlotId) ?? breakRows[0] ?? null)
-    : (breakRows[0] ?? null)
+  // ── Resolve this agent's roster & break rows from API data ───────────────────
+  const released     = portalData?.released    ?? false
+  const releaseRange = portalData?.releaseRange ?? null
+  const myRosterRow: RosterRow | null = portalData?.rosterRow ?? null
+  const myBreakRow:  BreakRow  | null = portalData?.breakRow  ?? null
 
   // ── Build schedule weeks from release range ──────────────────────────────────
-  const hasRealSchedule = released && releaseRange && rosterRows.length > 0
+  const hasRealSchedule = released && releaseRange && myRosterRow != null
   const weeks: WeekEntry[] = hasRealSchedule
     ? buildWeeks(releaseRange!, myRosterRow, myBreakRow)
     : []

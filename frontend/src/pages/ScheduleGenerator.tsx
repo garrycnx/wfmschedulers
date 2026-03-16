@@ -389,7 +389,10 @@ export default function ScheduleGenerator() {
                         settingsJson: JSON.stringify({ ...store.settings, releaseFrom, releaseTo }),
                         forecastJson: JSON.stringify(store.forecastRows),
                         requiredJson: JSON.stringify(store.requiredStaff),
-                        agentsJson: JSON.stringify(store.agents),
+                        agentsJson: JSON.stringify(store.agents.map(a => ({
+                          ...a,
+                          agentId: store.agentAssignments[a.id] ?? a.agentId,
+                        }))),
                         projectionsJson: JSON.stringify(store.projections),
                         rosterJson: JSON.stringify(store.rosterRows),
                         breaksJson: JSON.stringify(store.breakRows),
