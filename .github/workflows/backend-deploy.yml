@@ -43,41 +43,25 @@ jobs:
       - name: Prepare deployment package
         working-directory: backend
         run: |
-          # Write a deployment-specific package.json (start script adjusted for deploy root)
-          cat > dist/package.json << 'EOF'
-          {
-            "name": "wfm-schedule-backend",
-            "version": "1.0.0",
-            "scripts": {
-              "start": "node index.js"
-            },
-            "dependencies": {
-              "prisma": "^5.8.0",
-              "@prisma/client": "^5.8.0",
-              "axios": "^1.6.5",
-              "bcryptjs": "^2.4.3",
-              "compression": "^1.7.4",
-              "cors": "^2.8.5",
-              "dotenv": "^16.3.1",
-              "express": "^4.18.2",
-              "express-rate-limit": "^7.1.5",
-              "helmet": "^7.1.0",
-              "jsonwebtoken": "^9.0.2",
-              "morgan": "^1.10.0",
-              "multer": "^1.4.5-lts.1",
-              "zod": "^3.22.4"
-            }
-          }
-          EOF
-
-          # Copy Prisma schema (required by Prisma runtime)
+          # Copy Prisma schema into dist/
           mkdir -p dist/prisma
           cp prisma/schema.prisma dist/prisma/schema.prisma
 
-          # Install only production deps inside dist/ and generate Prisma client there
-          cd dist
-          npm install --omit=dev
-          node_modules/.bin/prisma generate --schema=prisma/schema.prisma
+          # Copy root package.json and package-lock.json into dist/
+          # so Azure Oryx can do a clean npm install with correct deps
+          cp package.json dist/package.json
+          cp package-lock.json dist/package-lock.json
+
+          # Patch the start script to point to index.js (not dist/index.js)
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('dist/package.json','utf8'));
+            pkg.scripts.start = 'node index.js';
+            delete pkg.scripts.dev;
+            delete pkg.scripts.build;
+            delete pkg.devDependencies;
+            fs.writeFileSync('dist/package.json', JSON.stringify(pkg, null, 2));
+          "
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
