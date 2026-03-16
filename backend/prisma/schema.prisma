@@ -18,6 +18,24 @@ model Organization {
   users     User[]
   agents    Agent[]
   schedules Schedule[]
+  lobs      LineOfBusiness[]
+}
+
+// Line of Business – e.g. "Customer Service", "Tech Support"
+model LineOfBusiness {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  color          String   @default("#6366f1") // hex colour for UI
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  agents    Agent[]
+  schedules Schedule[]
+
+  @@unique([name, organizationId])
 }
 
 model User {
@@ -55,6 +73,8 @@ model Agent {
   skill          String   @default("mid")     // junior | mid | senior | lead
   team           String?
   hireDate       DateTime
+  lobId          String?                       // Line of Business assignment
+  lob            LineOfBusiness? @relation(fields: [lobId], references: [id])
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   userId         String?  @unique             // portal login
@@ -89,6 +109,10 @@ model Schedule {
   id              String   @id @default(cuid())
   name            String
   weekStartDate   DateTime
+  fromDate        DateTime?               // LOB schedule range start
+  toDate          DateTime?               // LOB schedule range end
+  lobId           String?                 // Line of Business
+  lob             LineOfBusiness? @relation(fields: [lobId], references: [id])
   status          String   @default("draft")  // draft | published | archived
   settingsJson    String   @db.Text            // JSON blob of ScheduleSettings
   forecastJson    String   @db.Text

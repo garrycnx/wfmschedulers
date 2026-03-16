@@ -17,6 +17,18 @@ export interface Organization {
   createdAt: string
 }
 
+// ─── Line of Business ────────────────────────────────────────────────────────
+export interface LineOfBusiness {
+  id: string
+  name: string
+  description?: string
+  color: string
+  organizationId: string
+  createdAt: string
+  updatedAt: string
+  _count?: { agents: number; schedules: number }
+}
+
 // ─── Agent ───────────────────────────────────────────────────────────────────
 export type AgentStatus = 'active' | 'inactive' | 'on_leave'
 export type SkillLevel = 'junior' | 'mid' | 'senior' | 'lead'
@@ -31,9 +43,10 @@ export interface Agent {
   skill: SkillLevel
   team?: string
   hireDate: string
+  lobId?: string
+  lob?: LineOfBusiness
   organizationId: string
-  userId?: string          // if agent has a login account
-  shiftPatternId?: string
+  userId?: string
   createdAt: string
   updatedAt: string
 }
@@ -46,8 +59,9 @@ export interface AgentFormData {
   team?: string
   hireDate: string
   status: AgentStatus
-  employeeCode?: string   // admin can set; auto-generated if blank
-  password?: string       // admin sets initial password; never stored plain in real backend
+  employeeCode?: string
+  lobId?: string
+  password?: string
 }
 
 // ─── Schedule Settings ───────────────────────────────────────────────────────

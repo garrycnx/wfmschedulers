@@ -6,6 +6,7 @@ import type { Agent, AgentFormData, AgentStatus, SkillLevel } from '../types'
 import AgentModal from '../components/agents/AgentModal'
 import ShiftCalendarModal from '../components/agents/ShiftCalendarModal'
 import { useAgentStore } from '../store/agentStore'
+import { useLobStore } from '../store/lobStore'
 import { useScheduleStore } from '../store/scheduleStore'
 import { minToTime } from '../utils/scheduleEngine'
 
@@ -24,7 +25,10 @@ const skillStyle: Record<SkillLevel, string> = {
 
 export default function AgentManagement() {
   const { agents, loading, addAgent, updateAgent, deleteAgent, fetchAgents } = useAgentStore()
+  const { lobs, fetchLobs } = useLobStore()
   const { agents: slots, agentAssignments, assignAgent, unassignAgent } = useScheduleStore()
+
+  useEffect(() => { fetchLobs() }, [])
 
   const [search, setSearch] = useState('')
 
@@ -145,7 +149,7 @@ export default function AgentManagement() {
           <thead>
             <tr>
               <th className="text-left">Agent</th>
-              <th className="text-left hidden md:table-cell">Team</th>
+              <th className="text-left hidden md:table-cell">LOB / Team</th>
               <th className="text-center hidden lg:table-cell">Skill</th>
               <th className="text-center">Status</th>
               <th className="text-left hidden lg:table-cell">Hire Date</th>
@@ -179,7 +183,17 @@ export default function AgentManagement() {
                         </div>
                       </div>
                     </td>
-                    <td className="hidden md:table-cell text-gray-600 text-sm">{agent.team ?? '—'}</td>
+                    <td className="hidden md:table-cell text-sm">
+                      {agent.lobId && (
+                        <span
+                          className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full text-white mb-0.5"
+                          style={{ backgroundColor: lobs.find(l => l.id === agent.lobId)?.color ?? '#6366f1' }}
+                        >
+                          {lobs.find(l => l.id === agent.lobId)?.name ?? ''}
+                        </span>
+                      )}
+                      <p className="text-gray-500">{agent.team ?? '—'}</p>
+                    </td>
                     <td className="hidden lg:table-cell text-center">
                       <span className={skillStyle[agent.skill]}>{agent.skill}</span>
                     </td>

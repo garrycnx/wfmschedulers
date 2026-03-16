@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import Papa from 'papaparse'
 import { Check, ChevronRight, Loader2, Send, Unlock, Lock } from 'lucide-react'
 import { useScheduleStore } from '../store/scheduleStore'
+import { useLobStore } from '../store/lobStore'
 import { schedulesApi } from '../api/client'
 import SettingsPanel from '../components/scheduling/SettingsPanel'
 import ForecastUpload from '../components/scheduling/ForecastUpload'
@@ -39,12 +40,20 @@ function fmtDate(iso: string) {
 
 export default function ScheduleGenerator() {
   const store = useScheduleStore()
+  const { lobs, fetchLobs } = useLobStore()
   const [currentStep, setCurrentStep] = useState(1)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [selectedLobId, setSelectedLobId] = useState<string>('')
+  const [scheduleFrom, setScheduleFrom] = useState(() => new Date().toISOString().split('T')[0])
+  const [scheduleTo, setScheduleTo] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() + 6); return d.toISOString().split('T')[0]
+  })
   const [releaseFrom, setReleaseFrom] = useState(() => new Date().toISOString().split('T')[0])
   const [releaseTo, setReleaseTo] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() + 6); return d.toISOString().split('T')[0]
   })
+
+  useEffect(() => { fetchLobs() }, [])
 
   // ── Step 1: Parse uploaded CSV ────────────────────────────────────────────
   function handleForecastParsed(rows: ForecastRow[]) {
@@ -158,6 +167,55 @@ export default function ScheduleGenerator() {
               )}
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* LOB + Date range selector (always visible at top) */}
+      <div className="card p-5">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
+          Schedule Configuration
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* LOB */}
+          <div>
+            <label className="label">Line of Business</label>
+            <select
+              className="input"
+              value={selectedLobId}
+              onChange={(e) => setSelectedLobId(e.target.value)}
+            >
+              <option value="">— All / No LOB —</option>
+              {lobs.map((l) => (
+                <option key={l.id} value={l.id}>{l.name}</option>
+              ))}
+            </select>
+            {selectedLobId && (
+              <p className="text-[10px] text-brand-600 mt-1 font-medium">
+                {lobs.find(l => l.id === selectedLobId)?._count?.agents ?? '?'} agents in this LOB
+              </p>
+            )}
+          </div>
+          {/* From date */}
+          <div>
+            <label className="label">Schedule From</label>
+            <input
+              type="date"
+              className="input"
+              value={scheduleFrom}
+              onChange={(e) => { setScheduleFrom(e.target.value); setReleaseFrom(e.target.value) }}
+            />
+          </div>
+          {/* To date */}
+          <div>
+            <label className="label">Schedule To</label>
+            <input
+              type="date"
+              className="input"
+              value={scheduleTo}
+              min={scheduleFrom}
+              onChange={(e) => { setScheduleTo(e.target.value); setReleaseTo(e.target.value) }}
+            />
+          </div>
         </div>
       </div>
 
@@ -383,9 +441,13 @@ export default function ScheduleGenerator() {
                     toast.success('✅ Schedule released! Agents can now view their shifts.')
                     // Persist to backend (silent fallback – localStorage already saved it)
                     try {
+                      const lobName = lobs.find(l => l.id === selectedLobId)?.name
                       const saved = await schedulesApi.save({
-                        name: `${releaseFrom} → ${releaseTo}`,
-                        weekStartDate: releaseFrom,
+                        name: `${lobName ? lobName + ' · ' : ''}${scheduleFrom} → ${scheduleTo}`,
+                        weekStartDate: scheduleFrom,
+                        fromDate: scheduleFrom,
+                        toDate: scheduleTo,
+                        lobId: selectedLobId || undefined,
                         settingsJson: JSON.stringify({ ...store.settings, releaseFrom, releaseTo }),
                         forecastJson: JSON.stringify(store.forecastRows),
                         requiredJson: JSON.stringify(store.requiredStaff),

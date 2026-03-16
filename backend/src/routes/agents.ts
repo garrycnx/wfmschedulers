@@ -14,7 +14,8 @@ const AgentSchema = z.object({
   team:         z.string().optional(),
   hireDate:     z.string(),
   status:       z.enum(['active','inactive','on_leave']),
-  employeeCode: z.string().optional(),  // manager can set custom ID; auto-generated if blank
+  employeeCode: z.string().optional(),
+  lobId:        z.string().optional().nullable(),
 })
 
 // GET /api/agents

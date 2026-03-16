@@ -4,7 +4,7 @@ import { clsx } from 'clsx'
 import {
   LayoutDashboard, CalendarDays, Users, History,
   Settings, LogOut, ChevronLeft, ChevronRight,
-  Sparkles, ExternalLink,
+  Sparkles, ExternalLink, Briefcase,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 
@@ -17,6 +17,7 @@ const navItems = [
   { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/generate',   icon: Sparkles,        label: 'Generate Schedule' },
   { to: '/agents',     icon: Users,           label: 'Agents' },
+  { to: '/lobs',       icon: Briefcase,       label: 'Lines of Business' },
   { to: '/schedules',  icon: History,         label: 'Schedule History' },
   { to: '/settings',   icon: Settings,        label: 'Settings' },
 ]

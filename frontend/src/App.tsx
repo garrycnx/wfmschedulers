@@ -5,6 +5,7 @@ import Layout from './components/layout/Layout'
 import Dashboard from './pages/Dashboard'
 import ScheduleGenerator from './pages/ScheduleGenerator'
 import AgentManagement from './pages/AgentManagement'
+import LobManagement from './pages/LobManagement'
 import MySchedule from './pages/MySchedule'
 import ScheduleHistory from './pages/ScheduleHistory'
 import ScheduleDetail from './pages/ScheduleDetail'
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="generate" element={<ScheduleGenerator />} />
         <Route path="agents" element={<AgentManagement />} />
+        <Route path="lobs" element={<LobManagement />} />
         <Route path="schedules" element={<ScheduleHistory />} />
         <Route path="schedules/:id" element={<ScheduleDetail />} />
         <Route path="settings" element={<Settings />} />

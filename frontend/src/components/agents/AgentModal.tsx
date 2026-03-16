@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, KeyRound, Eye, EyeOff, Info } from 'lucide-react'
 import type { Agent, AgentFormData, AgentStatus, SkillLevel } from '../../types'
+import { useLobStore } from '../../store/lobStore'
 
 interface Props {
   open: boolean
@@ -19,13 +20,17 @@ const EMPTY: AgentFormData = {
   hireDate: new Date().toISOString().split('T')[0],
   status: 'active',
   employeeCode: '',
+  lobId: '',
   password: 'password',
 }
 
 export default function AgentModal({ open, agent, onClose, onSave }: Props) {
+  const { lobs, fetchLobs } = useLobStore()
   const [form, setForm] = useState<AgentFormData>(EMPTY)
   const [errors, setErrors] = useState<Partial<AgentFormData>>({})
   const [showPassword, setShowPassword] = useState(false)
+
+  useEffect(() => { fetchLobs() }, [])
 
   useEffect(() => {
     if (agent) {
@@ -40,7 +45,8 @@ export default function AgentModal({ open, agent, onClose, onSave }: Props) {
           : new Date().toISOString().split('T')[0],
         status: agent.status,
         employeeCode: agent.agentCode,
-        password: '',          // blank = keep existing password
+        lobId: agent.lobId ?? '',
+        password: '',
       })
     } else {
       setForm(EMPTY)
@@ -159,6 +165,15 @@ export default function AgentModal({ open, agent, onClose, onSave }: Props) {
                 <div>
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Role & Team</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">Line of Business</label>
+                      <select className="input" value={form.lobId ?? ''} onChange={set('lobId')}>
+                        <option value="">— No LOB —</option>
+                        {lobs.map((l) => (
+                          <option key={l.id} value={l.id}>{l.name}</option>
+                        ))}
+                      </select>
+                    </div>
                     <div>
                       <label className="label">Team</label>
                       <input
