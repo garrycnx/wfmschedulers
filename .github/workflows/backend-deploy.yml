@@ -36,12 +36,6 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      - name: Push database schema to Azure PostgreSQL
-        working-directory: backend
-        run: npx prisma db push --skip-generate
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
       - name: Compile TypeScript
         working-directory: backend
         run: npm run build
@@ -56,7 +50,7 @@ jobs:
             "version": "1.0.0",
             "scripts": {
               "start": "node index.js",
-              "postinstall": "prisma generate"
+              "postinstall": "prisma generate && prisma db push --skip-generate"
             },
             "dependencies": {
               "prisma": "^5.8.0",
