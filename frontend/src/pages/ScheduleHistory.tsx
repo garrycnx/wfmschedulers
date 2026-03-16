@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Plus, Archive, Download, Trash2, CalendarDays, Users, TrendingUp } from 'lucide-react'
+import { Search, Plus, Archive, Download, Trash2, CalendarDays, Users, TrendingUp, Pencil } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useScheduleStore } from '../store/scheduleStore'
 import { schedulesApi } from '../api/client'
@@ -250,6 +250,14 @@ export default function ScheduleHistory() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => navigate(`/schedules/${entry.id}`)}
+                      className="p-2 rounded-xl text-gray-400 hover:text-brand-600 hover:bg-brand-50 transition-all"
+                      title="Edit schedule"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+
                     <button
                       onClick={() => handleExport(entry)}
                       className="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"
