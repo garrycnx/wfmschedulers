@@ -47,25 +47,17 @@ jobs:
           mkdir -p dist/prisma
           cp prisma/schema.prisma dist/prisma/schema.prisma
 
-          # Copy root package.json and package-lock.json into dist/
-          # so Azure Oryx can do a clean npm install with correct deps
-          cp package.json dist/package.json
-          cp package-lock.json dist/package-lock.json
+          # Copy the pre-built node_modules (already has .prisma/client generated)
+          cp -r node_modules dist/node_modules
 
-          # Patch package.json: fix start script, move prisma CLI to prod deps
-          node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('dist/package.json','utf8'));
-            pkg.scripts.start = 'node index.js';
-            delete pkg.scripts.dev;
-            delete pkg.scripts.build;
-            // Move prisma CLI to prod deps so Oryx installs it (needed for prisma generate)
-            if (pkg.devDependencies && pkg.devDependencies.prisma) {
-              pkg.dependencies.prisma = pkg.devDependencies.prisma;
-            }
-            delete pkg.devDependencies;
-            fs.writeFileSync('dist/package.json', JSON.stringify(pkg, null, 2));
-          "
+          # Write a minimal package.json - no deps so Oryx skips npm install
+          cat > dist/package.json << 'PKGJSON'
+          {
+            "name": "wfm-schedule-backend",
+            "version": "1.0.0",
+            "scripts": { "start": "node index.js" }
+          }
+          PKGJSON
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
