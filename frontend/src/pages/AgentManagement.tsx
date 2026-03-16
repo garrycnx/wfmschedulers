@@ -54,8 +54,9 @@ export default function AgentManagement() {
       }
       setModalOpen(false)
       setEditingAgentId(null)
-    } catch {
-      toast.error('Failed to save agent. Please try again.')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      toast.error(msg ?? 'Failed to save agent. Please try again.')
     }
   }
 
@@ -63,8 +64,9 @@ export default function AgentManagement() {
     try {
       await deleteAgent(id)
       toast.success('Agent removed.')
-    } catch {
-      toast.error('Failed to remove agent.')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      toast.error(msg ?? 'Failed to remove agent.')
     }
   }
 

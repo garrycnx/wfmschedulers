@@ -51,6 +51,9 @@ export default function AgentModal({ open, agent, onClose, onSave }: Props) {
     const e: Partial<AgentFormData> = {}
     if (!form.name.trim()) e.name = 'Name is required'
     if (!form.email.trim() || !/\S+@\S+\.\S+/.test(form.email)) e.email = 'Valid email required'
+    if (!agent && !form.employeeCode?.trim()) e.employeeCode = 'Employee ID is required'
+    if (form.employeeCode?.trim() && !/^[A-Za-z0-9_-]+$/.test(form.employeeCode.trim()))
+      e.employeeCode = 'Only letters, numbers, hyphens and underscores allowed'
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -115,16 +118,18 @@ export default function AgentModal({ open, agent, onClose, onSave }: Props) {
                       {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
                     </div>
                     <div>
-                      <label className="label">Employee ID</label>
+                      <label className="label">Employee ID *</label>
                       <input
-                        className="input font-mono"
+                        className={`input font-mono uppercase ${errors.employeeCode ? 'border-red-400 focus:ring-red-300' : ''}`}
                         value={form.employeeCode}
                         onChange={set('employeeCode')}
-                        placeholder="AG001 (auto-generated)"
+                        placeholder="e.g. AG007"
+                        disabled={!!agent}           // can't rename existing agent's ID
                       />
-                      {!agent && (
-                        <p className="text-[10px] text-gray-400 mt-1">Leave blank to auto-generate</p>
-                      )}
+                      {errors.employeeCode
+                        ? <p className="text-xs text-red-500 mt-1">{errors.employeeCode}</p>
+                        : !agent && <p className="text-[10px] text-gray-400 mt-1">Must be unique across your team</p>
+                      }
                     </div>
                     <div>
                       <label className="label">Email *</label>
