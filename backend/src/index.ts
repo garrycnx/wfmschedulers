@@ -15,6 +15,9 @@ import { errorHandler } from './middleware/errorHandler'
 const app = express()
 const PORT = process.env.PORT ?? 5000
 
+// Trust Azure App Service's reverse proxy (fixes express-rate-limit X-Forwarded-For warning)
+app.set('trust proxy', 1)
+
 // ─── Security & Middleware ────────────────────────────────────────────────────
 app.use(helmet())
 app.use(compression())

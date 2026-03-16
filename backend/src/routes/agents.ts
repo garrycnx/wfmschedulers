@@ -7,13 +7,14 @@ const router = Router()
 router.use(requireAuth)
 
 const AgentSchema = z.object({
-  name:     z.string().min(1),
-  email:    z.string().email(),
-  phone:    z.string().optional(),
-  skill:    z.enum(['junior','mid','senior','lead']),
-  team:     z.string().optional(),
-  hireDate: z.string(),
-  status:   z.enum(['active','inactive','on_leave']),
+  name:         z.string().min(1),
+  email:        z.string().email(),
+  phone:        z.string().optional(),
+  skill:        z.enum(['junior','mid','senior','lead']),
+  team:         z.string().optional(),
+  hireDate:     z.string(),
+  status:       z.enum(['active','inactive','on_leave']),
+  employeeCode: z.string().optional(),  // manager can set custom ID; auto-generated if blank
 })
 
 // GET /api/agents
@@ -36,13 +37,28 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 // POST /api/agents
 router.post('/', async (req: AuthRequest, res: Response) => {
   const data = AgentSchema.parse(req.body)
+  const { employeeCode, ...agentFields } = data
   const orgId = req.user!.organizationId ?? 'default'
   const count = await prisma.agent.count({ where: { organizationId: orgId } })
+  const agentCode = employeeCode?.trim()
+    ? employeeCode.trim().toUpperCase()
+    : `AG${String(count + 1).padStart(3, '0')}`
+
+  // Check for duplicate employee ID within this organisation
+  const existing = await prisma.agent.findFirst({
+    where: { agentCode, organizationId: orgId },
+  })
+  if (existing) {
+    return res.status(409).json({
+      error: `Employee ID "${agentCode}" is already assigned to ${existing.name}. Please use a different ID.`,
+    })
+  }
+
   const agent = await prisma.agent.create({
     data: {
-      ...data,
+      ...agentFields,
       hireDate: new Date(data.hireDate),
-      agentCode: `AG${String(count + 1).padStart(3, '0')}`,
+      agentCode,
       organizationId: orgId,
     },
   })

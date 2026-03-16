@@ -227,7 +227,7 @@ export default function AgentModal({ open, agent, onClose, onSave }: Props) {
                       <p className="text-[11px] text-amber-700 leading-relaxed">
                         {agent
                           ? 'Agent will be prompted to reset their password on next login if you set a new one.'
-                          : 'Default password is <strong>password</strong>. Agent will be prompted to reset it on first login.'
+                          : <>Default password is <strong>password</strong>. Agent should change it on first login.</>
                         }
                       </p>
                     </div>
