@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Save, CalendarDays, Users, TrendingUp } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { schedulesApi } from '../api/client'
+import { useScheduleStore } from '../store/scheduleStore'
+import type { ReleaseHistoryEntry } from '../store/scheduleStore'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface BackendSchedule {
@@ -24,11 +26,20 @@ interface EditForm {
   status: 'released' | 'archived'
 }
 
+function fmtDateTime(iso: string) {
+  return new Date(iso).toLocaleString('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function ScheduleDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+
+  const { releaseHistory, archiveHistoryEntry } = useScheduleStore()
 
   const [form, setForm] = useState<EditForm>({
     name: '',
@@ -38,42 +49,63 @@ export default function ScheduleDetail() {
   })
   const [dirty, setDirty] = useState(false)
 
-  // ── Fetch schedule ──────────────────────────────────────────────────────────
-  const { data: schedule, isLoading, isError } = useQuery<BackendSchedule>({
+  // ── Try backend first ───────────────────────────────────────────────────────
+  const {
+    data: backendSchedule,
+    isLoading,
+    isError: backendFailed,
+  } = useQuery<BackendSchedule>({
     queryKey: ['schedule', id],
     queryFn: () => schedulesApi.get(id!).then((r) => r.data as BackendSchedule),
     enabled: !!id,
+    retry: 1,
   })
 
-  // Populate form once data arrives
+  // ── Fallback: find in localStorage ─────────────────────────────────────────
+  const localEntry: ReleaseHistoryEntry | undefined = releaseHistory.find((e) => e.id === id)
+
+  // Source of truth — backend wins, local is fallback
+  const source: 'backend' | 'local' | null =
+    backendSchedule ? 'backend' : localEntry ? 'local' : null
+
+  const isReady = !isLoading && source !== null
+  const notFound = !isLoading && backendFailed && !localEntry
+
+  // ── Populate form once data is available ────────────────────────────────────
   useEffect(() => {
-    if (!schedule) return
-    let releaseFrom = (schedule.weekStartDate ?? '').split('T')[0]
-    let releaseTo = releaseFrom
-    let name = schedule.name ?? ''
+    if (backendSchedule) {
+      let releaseFrom = (backendSchedule.weekStartDate ?? '').split('T')[0]
+      let releaseTo = releaseFrom
+      try {
+        const settings = JSON.parse(backendSchedule.settingsJson ?? '{}')
+        if (settings.releaseFrom) releaseFrom = settings.releaseFrom
+        if (settings.releaseTo) releaseTo = settings.releaseTo
+      } catch { /* ignore */ }
 
-    try {
-      const settings = JSON.parse(schedule.settingsJson ?? '{}')
-      if (settings.releaseFrom) releaseFrom = settings.releaseFrom
-      if (settings.releaseTo) releaseTo = settings.releaseTo
-    } catch { /* ignore */ }
+      setForm({
+        name: backendSchedule.name ?? '',
+        releaseFrom,
+        releaseTo,
+        status: backendSchedule.status === 'archived' ? 'archived' : 'released',
+      })
+      setDirty(false)
+    } else if (localEntry) {
+      setForm({
+        name: `Schedule ${localEntry.range.from} – ${localEntry.range.to}`,
+        releaseFrom: localEntry.range.from,
+        releaseTo: localEntry.range.to,
+        status: localEntry.status,
+      })
+      setDirty(false)
+    }
+  }, [backendSchedule, localEntry?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    setForm({
-      name,
-      releaseFrom,
-      releaseTo,
-      status: schedule.status === 'archived' ? 'archived' : 'released',
-    })
-    setDirty(false)
-  }, [schedule])
-
-  // ── Save mutation ───────────────────────────────────────────────────────────
+  // ── Save mutation (backend) ─────────────────────────────────────────────────
   const saveMutation = useMutation({
     mutationFn: () => {
-      const existing = schedule!
+      const existing = backendSchedule!
       let settings: Record<string, unknown> = {}
       try { settings = JSON.parse(existing.settingsJson ?? '{}') } catch { /* ignore */ }
-
       settings.releaseFrom = form.releaseFrom
       settings.releaseTo = form.releaseTo
 
@@ -89,29 +121,41 @@ export default function ScheduleDetail() {
       queryClient.invalidateQueries({ queryKey: ['schedule', id] })
       setDirty(false)
     },
-    onError: () => {
-      toast.error('Failed to save. Please try again.')
-    },
+    onError: () => toast.error('Failed to save. Please try again.'),
   })
+
+  // ── Save (local) ────────────────────────────────────────────────────────────
+  function saveLocal() {
+    if (form.status === 'archived') {
+      archiveHistoryEntry(id!)
+    }
+    toast.success('Schedule updated.')
+    setDirty(false)
+  }
 
   function handleChange<K extends keyof EditForm>(key: K, value: EditForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
     setDirty(true)
   }
 
-  // ── Derived helpers ─────────────────────────────────────────────────────────
-  function fmtDateTime(iso: string) {
-    return new Date(iso).toLocaleString('en-GB', {
-      day: 'numeric', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    })
+  function handleSave() {
+    if (source === 'backend') saveMutation.mutate()
+    else saveLocal()
   }
 
+  // ── Derived ─────────────────────────────────────────────────────────────────
   let agentCount = 0
-  try {
-    const agents = JSON.parse(schedule?.agentsJson ?? '[]')
-    agentCount = Array.isArray(agents) ? agents.length : 0
-  } catch { /* ignore */ }
+  if (backendSchedule) {
+    try {
+      const agents = JSON.parse(backendSchedule.agentsJson ?? '[]')
+      agentCount = Array.isArray(agents) ? agents.length : 0
+    } catch { /* ignore */ }
+  } else if (localEntry) {
+    agentCount = localEntry.agentCount
+  }
+
+  const createdAt =
+    backendSchedule?.createdAt ?? localEntry?.releasedAt ?? ''
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
@@ -128,21 +172,22 @@ export default function ScheduleDetail() {
         <div>
           <h2 className="text-base font-bold text-gray-900">Edit Schedule</h2>
           <p className="text-xs text-gray-400">
-            {schedule ? `Created ${fmtDateTime(schedule.createdAt)}` : 'Loading…'}
+            {createdAt ? `Released ${fmtDateTime(createdAt)}` : isLoading ? 'Loading…' : ''}
           </p>
         </div>
       </div>
 
-      {/* Loading / Error states */}
+      {/* Loading */}
       {isLoading && (
         <div className="card p-12 text-center">
           <p className="text-gray-400 text-sm animate-pulse">Loading schedule…</p>
         </div>
       )}
 
-      {isError && (
+      {/* Not found */}
+      {notFound && (
         <div className="card p-12 text-center">
-          <p className="text-red-500 text-sm font-medium">Failed to load schedule.</p>
+          <p className="text-red-500 text-sm font-medium">Schedule not found.</p>
           <button
             onClick={() => navigate('/schedules')}
             className="mt-3 text-brand-600 hover:text-brand-500 text-sm font-semibold"
@@ -153,7 +198,7 @@ export default function ScheduleDetail() {
       )}
 
       {/* Edit form */}
-      {schedule && !isLoading && !isError && (
+      {isReady && (
         <div className="card p-6 space-y-5">
 
           {/* Schedule name */}
@@ -222,12 +267,15 @@ export default function ScheduleDetail() {
               <TrendingUp className="w-3.5 h-3.5 text-gray-400" />
               <span>Projections preserved</span>
             </div>
+            {source === 'local' && (
+              <span className="text-xs text-amber-500 font-medium">Saved locally</span>
+            )}
           </div>
 
           {/* Save button */}
           <div className="flex justify-end pt-2">
             <button
-              onClick={() => saveMutation.mutate()}
+              onClick={handleSave}
               disabled={!dirty || saveMutation.isPending}
               className="flex items-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40
                          disabled:cursor-not-allowed text-white font-semibold rounded-xl px-5 py-2.5

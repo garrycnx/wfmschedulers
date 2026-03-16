@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, Plus, Edit2, Trash2, Send } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -22,10 +22,13 @@ const skillStyle: Record<SkillLevel, string> = {
 }
 
 export default function AgentManagement() {
-  const { agents, addAgent, updateAgent, deleteAgent } = useAgentStore()
+  const { agents, loading, addAgent, updateAgent, deleteAgent, fetchAgents } = useAgentStore()
   const { agents: slots, agentAssignments, assignAgent, unassignAgent } = useScheduleStore()
 
   const [search, setSearch] = useState('')
+
+  // Load agents from backend on mount
+  useEffect(() => { fetchAgents() }, [])
   const [statusFilter, setStatusFilter] = useState<AgentStatus | 'all'>('all')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null)
@@ -40,21 +43,29 @@ export default function AgentManagement() {
     return matchSearch && matchStatus
   })
 
-  function handleSave(data: AgentFormData) {
-    if (editingAgent) {
-      updateAgent(editingAgent.id, data)
-      toast.success('Agent updated.')
-    } else {
-      addAgent(data)
-      toast.success('Agent created.')
+  async function handleSave(data: AgentFormData) {
+    try {
+      if (editingAgent) {
+        await updateAgent(editingAgent.id, data)
+        toast.success('Agent updated.')
+      } else {
+        await addAgent(data)
+        toast.success('Agent created.')
+      }
+      setModalOpen(false)
+      setEditingAgentId(null)
+    } catch {
+      toast.error('Failed to save agent. Please try again.')
     }
-    setModalOpen(false)
-    setEditingAgentId(null)
   }
 
-  function handleDelete(id: string) {
-    deleteAgent(id)
-    toast.success('Agent removed.')
+  async function handleDelete(id: string) {
+    try {
+      await deleteAgent(id)
+      toast.success('Agent removed.')
+    } catch {
+      toast.error('Failed to remove agent.')
+    }
   }
 
   function handleInvite(email: string) {
@@ -243,10 +254,17 @@ export default function AgentManagement() {
                 )
               })}
             </AnimatePresence>
-            {filtered.length === 0 && (
+            {loading && (
+              <tr>
+                <td colSpan={7} className="text-center text-gray-400 py-8 text-sm">
+                  Loading agents…
+                </td>
+              </tr>
+            )}
+            {!loading && filtered.length === 0 && (
               <tr>
                 <td colSpan={7} className="text-center text-gray-500 py-8 text-sm">
-                  No agents match your search.
+                  {agents.length === 0 ? 'No agents yet. Click "Add Agent" to get started.' : 'No agents match your search.'}
                 </td>
               </tr>
             )}
