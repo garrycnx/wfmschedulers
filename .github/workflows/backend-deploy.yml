@@ -74,13 +74,10 @@ jobs:
           mkdir -p dist/prisma
           cp prisma/schema.prisma dist/prisma/schema.prisma
 
-          # Install only production deps inside dist/
+          # Install only production deps inside dist/ and generate Prisma client there
           cd dist
           npm install --omit=dev
-
-          # Generate Prisma client into dist/node_modules using the CLI from the parent
-          cd ..
-          node_modules/.bin/prisma generate --schema=dist/prisma/schema.prisma
+          node_modules/.bin/prisma generate --schema=prisma/schema.prisma
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
