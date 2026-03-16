@@ -49,7 +49,7 @@ jobs:
             "name": "wfm-schedule-backend",
             "version": "1.0.0",
             "scripts": {
-              "start": "node_modules/.bin/prisma db push --skip-generate && node index.js",
+              "start": "node index.js",
               "postinstall": "prisma generate"
             },
             "dependencies": {
