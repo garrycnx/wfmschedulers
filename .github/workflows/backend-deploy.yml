@@ -49,8 +49,7 @@ jobs:
             "name": "wfm-schedule-backend",
             "version": "1.0.0",
             "scripts": {
-              "start": "node index.js",
-              "postinstall": "prisma generate"
+              "start": "node index.js"
             },
             "dependencies": {
               "prisma": "^5.8.0",
