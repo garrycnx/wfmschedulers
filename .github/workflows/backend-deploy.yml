@@ -47,17 +47,21 @@ jobs:
           mkdir -p dist/prisma
           cp prisma/schema.prisma dist/prisma/schema.prisma
 
-          # Copy the pre-built node_modules (already has .prisma/client generated)
-          cp -r node_modules dist/node_modules
+          # Create node_modules.tar.gz from our pre-built node_modules
+          # (includes .prisma/client generated above)
+          # Oryx startup script extracts this with: tar -xzf node_modules.tar.gz -C /node_modules
+          # so the tar must contain the CONTENTS of node_modules, not the directory itself
+          echo "Creating node_modules.tar.gz with pre-generated Prisma client..."
+          tar -czf dist/node_modules.tar.gz -C node_modules .
 
-          # Write a minimal package.json - no deps so Oryx skips npm install
-          cat > dist/package.json << 'PKGJSON'
-          {
-            "name": "wfm-schedule-backend",
-            "version": "1.0.0",
-            "scripts": { "start": "node index.js" }
-          }
-          PKGJSON
+          # Write a minimal package.json
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json','utf8'));
+            pkg.scripts = { start: 'node index.js' };
+            delete pkg.devDependencies;
+            fs.writeFileSync('dist/package.json', JSON.stringify(pkg, null, 2));
+          "
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
