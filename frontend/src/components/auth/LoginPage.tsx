@@ -85,7 +85,7 @@ export default function LoginPage() {
                 d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">WFM Club</h1>
+          <h1 className="text-3xl font-bold text-indigo-900 tracking-tight">FIS WFM AI Scheduler</h1>
           <p className="mt-2 text-slate-400 text-sm">AI-Powered Enterprise Scheduling</p>
         </div>
 
