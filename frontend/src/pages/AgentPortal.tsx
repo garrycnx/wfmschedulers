@@ -51,6 +51,24 @@ function parseDateLocal(s: string): Date {
   return new Date(y, m - 1, d)
 }
 
+/** "HH:MM" → total minutes */
+function timeToMin(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+/** minutes → "HH:MM" clamped to 00:00–23:59 */
+function minToTime(m: number): string {
+  const c = Math.max(0, Math.min(23 * 60 + 59, m))
+  return `${String(Math.floor(c / 60)).padStart(2, '0')}:${String(c % 60).padStart(2, '0')}`
+}
+/** Shift a "HH:MM-HH:MM" break range by offsetMin minutes */
+function shiftBreak(range: string, offsetMin: number): string {
+  if (!range || offsetMin === 0) return range
+  const [s, e] = range.split('-')
+  if (!s || !e) return range
+  return `${minToTime(timeToMin(s) + offsetMin)}-${minToTime(timeToMin(e) + offsetMin)}`
+}
+
 /** Build per-day entries for the release range using the agent's roster/break rows */
 function buildWeeks(
   releaseRange: { from: string; to: string },
@@ -78,15 +96,23 @@ function buildWeeks(
       isOff    = !shiftStr || shiftStr === 'OFF'
     }
 
+    // Shift breaks by the same offset as the shift start change
+    const originalShiftStr  = rosterRow?.[wfmDay] ?? ''
+    const originalStart     = originalShiftStr && originalShiftStr !== 'OFF' ? originalShiftStr.split('-')[0] : null
+    const overrideStart     = override && !override.isOff ? override.shiftStart : null
+    const breakOffsetMin    = (originalStart && overrideStart)
+      ? timeToMin(overrideStart) - timeToMin(originalStart)
+      : 0
+
     allDays.push({
       day:    wfmDay,
       date:   cur.getDate(),
       month:  cur.getMonth(),
       year:   cur.getFullYear(),
       shift:  isOff ? 'OFF' : shiftStr,
-      break1: breakRow?.[`${wfmDay}_Break_1`] ?? '',
-      lunch:  breakRow?.[`${wfmDay}_Lunch`]   ?? '',
-      break2: breakRow?.[`${wfmDay}_Break_2`] ?? '',
+      break1: shiftBreak(breakRow?.[`${wfmDay}_Break_1`] ?? '', breakOffsetMin),
+      lunch:  shiftBreak(breakRow?.[`${wfmDay}_Lunch`]   ?? '', breakOffsetMin),
+      break2: shiftBreak(breakRow?.[`${wfmDay}_Break_2`] ?? '', breakOffsetMin),
       off:    isOff,
     })
     const next = new Date(cur)
