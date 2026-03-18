@@ -49,7 +49,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     select: {
       id: true, name: true, weekStartDate: true, fromDate: true, toDate: true,
       lobId: true, status: true, createdBy: true, createdAt: true, updatedAt: true,
-      settingsJson: true, projectionsJson: true, agentsJson: true,
+      settingsJson: true, forecastJson: true, projectionsJson: true, agentsJson: true,
       rosterJson: true, requiredJson: true,
     },
   })

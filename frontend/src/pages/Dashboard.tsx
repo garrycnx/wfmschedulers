@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useLobStore } from '../store/lobStore'
 import { agentsApi, apiClient } from '../api/client'
+import { erlangAEstimates } from '../utils/erlang'
 import type { Agent, RosterRow, DayProjection } from '../types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -24,6 +25,7 @@ interface DashSchedule {
   lobId: string | null
   status: string
   settingsJson: string
+  forecastJson: string
   projectionsJson: string
   agentsJson: string
   rosterJson: string
@@ -32,8 +34,44 @@ interface DashSchedule {
 
 interface SlotAgent { id: string; agentId?: string; start: number; end: number; off: string[] }
 interface RequiredRow { weekday: string; slotMin: number; slotLabel: string; required: number }
+interface ForecastRow { weekday: string; slotMin: number; volume: number }
+interface SchedSettings {
+  ahtMinutes: number
+  slaSeconds: number
+  patienceSeconds: number
+  intervalLengthMin?: number
+}
 interface Override { isOff: boolean; shiftStart: string | null; shiftEnd: string | null }
 type OverrideMap = Record<string, Record<string, Override>>  // agentId → dateStr → override
+
+/** Compute Erlang-A weighted SLA% for a given day using only filled agents */
+function computeActualSla(
+  day: string,
+  slotAgents: SlotAgent[],
+  forecastRows: ForecastRow[],
+  settings: SchedSettings,
+): number {
+  const { ahtMinutes, slaSeconds, patienceSeconds, intervalLengthMin = 30 } = settings
+  const mu    = 1 / ahtMinutes
+  const theta = 1 / (patienceSeconds / 60)
+  const tSla  = slaSeconds / 60
+
+  let slaAcc = 0, totalVol = 0
+  for (let slotMin = 0; slotMin < 24 * 60; slotMin += intervalLengthMin) {
+    const volume = forecastRows.find(f => f.weekday === day && f.slotMin === slotMin)?.volume ?? 0
+    if (volume <= 0) continue
+    // Count only filled agents (agentId set) working this slot on this day
+    const filled = slotAgents.filter(a =>
+      a.agentId && !a.off.includes(day) && a.start <= slotMin && slotMin < a.end
+    ).length
+    const lam = volume / intervalLengthMin
+    const a   = lam / mu
+    const { slaEst } = erlangAEstimates(a, filled, mu, theta, tSla)
+    slaAcc  += slaEst * volume
+    totalVol += volume
+  }
+  return totalVol > 0 ? +((slaAcc / totalVol) * 100).toFixed(1) : 0
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const WFM_DAYS  = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -149,11 +187,13 @@ export default function Dashboard() {
   // ── Parsed schedule data ─────────────────────────────────────────
   const parsed = useMemo(() => schedules.map(s => ({
     ...s,
-    range:       getScheduleRange(s),
-    slotAgents:  JSON.parse(s.agentsJson)     as SlotAgent[],
-    roster:      JSON.parse(s.rosterJson)     as RosterRow[],
-    projections: JSON.parse(s.projectionsJson)as DayProjection[],
-    required:    JSON.parse(s.requiredJson)   as RequiredRow[],
+    range:        getScheduleRange(s),
+    slotAgents:   JSON.parse(s.agentsJson)      as SlotAgent[],
+    roster:       JSON.parse(s.rosterJson)      as RosterRow[],
+    projections:  JSON.parse(s.projectionsJson) as DayProjection[],
+    required:     JSON.parse(s.requiredJson)    as RequiredRow[],
+    forecastRows: JSON.parse(s.forecastJson || '[]') as ForecastRow[],
+    schedSettings:JSON.parse(s.settingsJson)    as SchedSettings,
   })), [schedules])
 
   // ── KPIs ─────────────────────────────────────────────────────────
@@ -167,12 +207,23 @@ export default function Dashboard() {
 
   const avgKpis = useMemo(() => {
     const all = parsed.flatMap(s => s.projections)
-    if (!all.length) return { sla: 0, occupancy: 0 }
-    return {
-      sla:      +(all.reduce((a, p) => a + p.projectedSLAPct,  0) / all.length).toFixed(1),
-      occupancy:+(all.reduce((a, p) => a + p.avgOccupancyPct,  0) / all.length).toFixed(1),
-    }
-  }, [parsed])
+    if (!all.length) return { projectedSla: 0, actualSla: 0, occupancy: 0 }
+    // Projected SLA: from stored projections (full roster design)
+    const projectedSla = +(all.reduce((a, p) => a + p.projectedSLAPct, 0) / all.length).toFixed(1)
+    const occupancy    = +(all.reduce((a, p) => a + p.avgOccupancyPct, 0) / all.length).toFixed(1)
+    // Actual SLA: re-compute using only filled agents across all days in range
+    const actualVals = dateRange(dateFrom, dateTo).flatMap(date => {
+      const ds  = toDateStr(date)
+      const day = getWfmDay(date)
+      const sch = parsed.find(s => s.range.from <= ds && s.range.to >= ds)
+      if (!sch?.projections.find(p => p.day === day)) return []
+      return [computeActualSla(day, sch.slotAgents, sch.forecastRows, sch.schedSettings)]
+    })
+    const actualSla = actualVals.length
+      ? +(actualVals.reduce((a, v) => a + v, 0) / actualVals.length).toFixed(1)
+      : 0
+    return { projectedSla, actualSla, occupancy }
+  }, [parsed, dateFrom, dateTo])
 
   // ── SLA day-by-day chart ──────────────────────────────────────────
   const slaChartData = useMemo(() => {
@@ -182,10 +233,14 @@ export default function Dashboard() {
       const sch = parsed.find(s => s.range.from <= ds && s.range.to >= ds)
       const proj = sch?.projections.find(p => p.day === day)
       if (!proj) return []
+      const actualSla = sch
+        ? computeActualSla(day, sch.slotAgents, sch.forecastRows, sch.schedSettings)
+        : 0
       return [{
-        date:    `${DAY_SHORT[date.getDay()]} ${date.getDate()} ${SHORT_M[date.getMonth()]}`,
-        sla:     +proj.projectedSLAPct.toFixed(1),
-        abandon: +proj.projectedAbandonPct.toFixed(1),
+        date:      `${DAY_SHORT[date.getDay()]} ${date.getDate()} ${SHORT_M[date.getMonth()]}`,
+        sla:       +proj.projectedSLAPct.toFixed(1),
+        actualSla,
+        abandon:   +proj.projectedAbandonPct.toFixed(1),
       }]
     })
   }, [parsed, dateFrom, dateTo])
@@ -408,10 +463,10 @@ export default function Dashboard() {
           {/* KPI cards */}
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             {[
-              { label: 'Unique Agents Scheduled', value: String(uniqueAgentIds.size),                              icon: Users,         color: 'brand'   },
-              { label: 'Schedules in Range',       value: String(schedules.length),                                icon: CalendarCheck, color: 'emerald' },
-              { label: 'Avg Projected SLA',        value: avgKpis.sla       ? `${avgKpis.sla}%`       : '—',      icon: TrendingUp,    color: 'sky'     },
-              { label: 'Avg Occupancy',            value: avgKpis.occupancy ? `${avgKpis.occupancy}%` : '—',      icon: Activity,      color: 'violet'  },
+              { label: 'Unique Agents Scheduled', value: String(uniqueAgentIds.size),                                          icon: Users,         color: 'brand'   },
+              { label: 'Schedules in Range',       value: String(schedules.length),                                            icon: CalendarCheck, color: 'emerald' },
+              { label: 'Actual SLA (Filled Slots)',value: avgKpis.actualSla    ? `${avgKpis.actualSla}%`    : '—',             icon: TrendingUp,    color: 'sky'     },
+              { label: 'Projected SLA (Full Roster)',value: avgKpis.projectedSla ? `${avgKpis.projectedSla}%` : '—',           icon: Activity,      color: 'violet'  },
             ].map((kpi, i) => (
               <motion.div key={kpi.label} custom={i}
                 initial={{ opacity: 0, y: 16 }}
@@ -435,32 +490,38 @@ export default function Dashboard() {
             <div className="bg-white border border-gray-200 rounded-2xl p-5 xl:col-span-2">
               <div className="mb-5">
                 <h3 className="text-sm font-semibold text-gray-900">SLA Projection</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Projected SLA % and Abandon % by day</p>
+                <p className="text-xs text-gray-500 mt-0.5">Projected SLA (full roster design) vs Actual SLA (filled agents only)</p>
               </div>
               {slaChartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={220}>
                   <AreaChart data={slaChartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="gradSla" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor="#6370fa" stopOpacity={0.3}/>
+                        <stop offset="5%"  stopColor="#6370fa" stopOpacity={0.25}/>
                         <stop offset="95%" stopColor="#6370fa" stopOpacity={0}/>
                       </linearGradient>
+                      <linearGradient id="gradActual" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor="#10b981" stopOpacity={0.25}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
                       <linearGradient id="gradAbn" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor="#f87171" stopOpacity={0.3}/>
+                        <stop offset="5%"  stopColor="#f87171" stopOpacity={0.25}/>
                         <stop offset="95%" stopColor="#f87171" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#6b7280' }} />
-                    <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} />
+                    <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} domain={[0, 100]} />
                     <Tooltip
                       contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10 }}
                       labelStyle={{ color: '#374151', fontSize: 12 }}
                       itemStyle={{ fontSize: 12 }}
+                      formatter={(val: number, name: string) => [`${val}%`, name]}
                     />
                     <Legend iconSize={10} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                    <Area type="monotone" dataKey="sla"     name="SLA %"    stroke="#6370fa" fill="url(#gradSla)" strokeWidth={2} dot={false} />
-                    <Area type="monotone" dataKey="abandon" name="Abandon %" stroke="#f87171" fill="url(#gradAbn)" strokeWidth={2} dot={false} />
+                    <Area type="monotone" dataKey="sla"       name="Projected SLA" stroke="#6370fa" fill="url(#gradSla)"    strokeWidth={2} dot={false} strokeDasharray="5 3" />
+                    <Area type="monotone" dataKey="actualSla" name="Actual SLA"     stroke="#10b981" fill="url(#gradActual)" strokeWidth={2.5} dot={false} />
+                    <Area type="monotone" dataKey="abandon"   name="Abandon %"      stroke="#f87171" fill="url(#gradAbn)"    strokeWidth={1.5} dot={false} />
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
