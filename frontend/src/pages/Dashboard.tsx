@@ -36,10 +36,10 @@ interface SlotAgent { id: string; agentId?: string; start: number; end: number; 
 interface RequiredRow { weekday: string; slotMin: number; slotLabel: string; required: number }
 interface ForecastRow { weekday: string; slotMin: number; volume: number }
 interface SchedSettings {
-  ahtMinutes: number
-  slaSeconds: number
+  ahtSeconds: number
+  slaThresholdSeconds: number
   patienceSeconds: number
-  intervalLengthMin?: number
+  intervalFormat?: string   // e.g. "30 minutes" | "15 minutes"
 }
 interface Override { isOff: boolean; shiftStart: string | null; shiftEnd: string | null }
 type OverrideMap = Record<string, Record<string, Override>>  // agentId → dateStr → override
@@ -51,10 +51,13 @@ function computeActualSla(
   forecastRows: ForecastRow[],
   settings: SchedSettings,
 ): number {
-  const { ahtMinutes, slaSeconds, patienceSeconds, intervalLengthMin = 30 } = settings
+  const ahtMinutes       = (settings.ahtSeconds ?? 360) / 60
+  const slaThresholdMin  = (settings.slaThresholdSeconds ?? 20) / 60
+  const patienceMinutes  = (settings.patienceSeconds ?? 120) / 60
+  const intervalLengthMin = settings.intervalFormat?.startsWith('15') ? 15 : 30
   const mu    = 1 / ahtMinutes
-  const theta = 1 / (patienceSeconds / 60)
-  const tSla  = slaSeconds / 60
+  const theta = 1 / patienceMinutes
+  const tSla  = slaThresholdMin
 
   let slaAcc = 0, totalVol = 0
   for (let slotMin = 0; slotMin < 24 * 60; slotMin += intervalLengthMin) {
@@ -64,10 +67,10 @@ function computeActualSla(
     const filled = slotAgents.filter(a =>
       a.agentId && !a.off.includes(day) && a.start <= slotMin && slotMin < a.end
     ).length
-    const lam = volume / intervalLengthMin
-    const a   = lam / mu
-    const { slaEst } = erlangAEstimates(a, filled, mu, theta, tSla)
-    slaAcc  += slaEst * volume
+    const lam        = volume / intervalLengthMin
+    const traffic    = lam / mu
+    const { slaEst } = erlangAEstimates(traffic, filled, mu, theta, tSla)
+    slaAcc   += (isNaN(slaEst) ? 0 : slaEst) * volume
     totalVol += volume
   }
   return totalVol > 0 ? +((slaAcc / totalVol) * 100).toFixed(1) : 0
