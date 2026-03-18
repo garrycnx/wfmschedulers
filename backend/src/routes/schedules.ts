@@ -9,6 +9,9 @@ router.use(requireAuth)
 const SaveScheduleSchema = z.object({
   name: z.string().min(1),
   weekStartDate: z.string(),
+  fromDate: z.string().optional().nullable(),
+  toDate: z.string().optional().nullable(),
+  lobId: z.string().optional().nullable(),
   settingsJson: z.string(),
   forecastJson: z.string(),
   requiredJson: z.string(),
@@ -48,6 +51,9 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     data: {
       ...data,
       weekStartDate: new Date(data.weekStartDate),
+      fromDate: data.fromDate ? new Date(data.fromDate) : null,
+      toDate:   data.toDate   ? new Date(data.toDate)   : null,
+      lobId:    data.lobId ?? null,
       organizationId: orgId,
       createdBy: req.user!.id,
     },
@@ -63,6 +69,9 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     data: {
       ...data,
       weekStartDate: data.weekStartDate ? new Date(data.weekStartDate) : undefined,
+      fromDate: data.fromDate ? new Date(data.fromDate) : data.fromDate === null ? null : undefined,
+      toDate:   data.toDate   ? new Date(data.toDate)   : data.toDate   === null ? null : undefined,
+      lobId:    data.lobId !== undefined ? (data.lobId ?? null) : undefined,
     },
   })
   res.json(schedule)

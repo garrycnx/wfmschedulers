@@ -10,11 +10,14 @@ import type { RosterRow, BreakRow } from '../types'
 
 const PORTAL_API = `${import.meta.env.VITE_API_URL ?? ''}/api/portal`
 
+interface OverrideEntry { isOff: boolean; shiftStart: string | null; shiftEnd: string | null }
+
 interface PortalData {
   released: boolean
   releaseRange: { from: string; to: string } | null
   rosterRow: RosterRow | null
   breakRow: BreakRow | null
+  overrideMap: Record<string, OverrideEntry>
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -53,6 +56,7 @@ function buildWeeks(
   releaseRange: { from: string; to: string },
   rosterRow: RosterRow | null,
   breakRow: BreakRow | null,
+  overrideMap: Record<string, OverrideEntry> = {},
 ): WeekEntry[] {
   const start = parseDateLocal(releaseRange.from)
   const end   = parseDateLocal(releaseRange.to)
@@ -60,9 +64,20 @@ function buildWeeks(
 
   let cur = new Date(start)
   while (cur <= end) {
-    const wfmDay  = WFM_DAYS[JS_TO_WFM_IDX[cur.getDay()]]
-    const shiftStr = rosterRow?.[wfmDay] ?? ''
-    const isOff   = !shiftStr || shiftStr === 'OFF'
+    const wfmDay   = WFM_DAYS[JS_TO_WFM_IDX[cur.getDay()]]
+    const dateKey  = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`
+    const override = overrideMap[dateKey]
+
+    let shiftStr: string
+    let isOff: boolean
+    if (override) {
+      isOff    = override.isOff
+      shiftStr = override.isOff ? 'OFF' : (override.shiftStart && override.shiftEnd ? `${override.shiftStart}-${override.shiftEnd}` : '')
+    } else {
+      shiftStr = rosterRow?.[wfmDay] ?? ''
+      isOff    = !shiftStr || shiftStr === 'OFF'
+    }
+
     allDays.push({
       day:    wfmDay,
       date:   cur.getDate(),
@@ -109,6 +124,7 @@ function buildDateMapFromStore(
   releaseRange: { from: string; to: string } | null,
   rosterRow: RosterRow | null,
   breakRow: BreakRow | null,
+  overrideMap: Record<string, OverrideEntry> = {},
 ): Record<string, CalendarDayInfo> {
   if (!releaseRange) return {}
   const map: Record<string, CalendarDayInfo> = {}
@@ -117,8 +133,19 @@ function buildDateMapFromStore(
   let cur = new Date(start)
   while (cur <= end) {
     const wfmDay   = WFM_DAYS[JS_TO_WFM_IDX[cur.getDay()]]
-    const shiftStr = rosterRow?.[wfmDay] ?? ''
-    const isOff    = !shiftStr || shiftStr === 'OFF'
+    const dateKey  = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`
+    const override = overrideMap[dateKey]
+
+    let shiftStr: string
+    let isOff: boolean
+    if (override) {
+      isOff    = override.isOff
+      shiftStr = override.isOff ? 'OFF' : (override.shiftStart && override.shiftEnd ? `${override.shiftStart}-${override.shiftEnd}` : '')
+    } else {
+      shiftStr = rosterRow?.[wfmDay] ?? ''
+      isOff    = !shiftStr || shiftStr === 'OFF'
+    }
+
     const key = `${cur.getFullYear()}-${cur.getMonth()}-${cur.getDate()}`
     map[key] = {
       off:      isOff,
@@ -363,6 +390,7 @@ export default function AgentPortal() {
         releaseRange: schedRes.data.releaseRange ?? null,
         rosterRow:    schedRes.data.rosterRow ?? null,
         breakRow:     schedRes.data.breakRow ?? null,
+        overrideMap:  schedRes.data.overrideMap ?? {},
       }
       setPortalData(data)
       setLoggedIn(true)
@@ -385,14 +413,15 @@ export default function AgentPortal() {
   const releaseRange = portalData?.releaseRange ?? null
   const myRosterRow: RosterRow | null = portalData?.rosterRow ?? null
   const myBreakRow:  BreakRow  | null = portalData?.breakRow  ?? null
+  const overrideMap  = portalData?.overrideMap ?? {}
 
   // ── Build schedule weeks from release range ──────────────────────────────────
   const hasRealSchedule = released && releaseRange && myRosterRow != null
   const weeks: WeekEntry[] = hasRealSchedule
-    ? buildWeeks(releaseRange!, myRosterRow, myBreakRow)
+    ? buildWeeks(releaseRange!, myRosterRow, myBreakRow, overrideMap)
     : []
 
-  const dateMap = buildDateMapFromStore(releaseRange, myRosterRow, myBreakRow)
+  const dateMap = buildDateMapFromStore(releaseRange, myRosterRow, myBreakRow, overrideMap)
 
   // ── Login screen ─────────────────────────────────────────────────────────────
   if (!loggedIn) {

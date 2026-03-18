@@ -64,11 +64,31 @@ router.get('/schedule/:agentCode', async (req: Request, res: Response) => {
       ? (breakRows.find(r => r.agent === slot.id) ?? breakRows[0] ?? null)
       : (breakRows[0] ?? null)
 
+    // Fetch shift day overrides for this agent within the release range
+    const fromDate = new Date(releaseRange.from + 'T00:00:00Z')
+    const toDate   = new Date(releaseRange.to   + 'T00:00:00Z')
+    toDate.setUTCDate(toDate.getUTCDate() + 1) // inclusive end
+
+    const overrides = await prisma.shiftDayOverride.findMany({
+      where: {
+        agentId:      agent.id,
+        overrideDate: { gte: fromDate, lt: toDate },
+      },
+    })
+
+    // Convert to a date-keyed map for easy frontend lookup
+    const overrideMap: Record<string, { isOff: boolean; shiftStart: string | null; shiftEnd: string | null }> = {}
+    for (const ov of overrides) {
+      const key = ov.overrideDate.toISOString().split('T')[0] // 'YYYY-MM-DD'
+      overrideMap[key] = { isOff: ov.isOff, shiftStart: ov.shiftStart, shiftEnd: ov.shiftEnd }
+    }
+
     return res.json({
       released: true,
       releaseRange,
-      rosterRow: myRosterRow,
-      breakRow:  myBreakRow,
+      rosterRow:   myRosterRow,
+      breakRow:    myBreakRow,
+      overrideMap,
     })
   } catch {
     return res.status(500).json({ error: 'Internal server error.' })
