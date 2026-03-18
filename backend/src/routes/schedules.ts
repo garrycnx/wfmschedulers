@@ -1,5 +1,6 @@
 import { Router, Response } from 'express'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../config/database'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 
@@ -21,16 +22,35 @@ const SaveScheduleSchema = z.object({
   breaksJson: z.string(),
 })
 
-// GET /api/schedules
+// GET /api/schedules?from=2026-03-01&to=2026-03-31&lobId=xxx
 router.get('/', async (req: AuthRequest, res: Response) => {
   const orgId = req.user!.organizationId
+  const { from, to, lobId } = req.query
+
+  const where: Prisma.ScheduleWhereInput = orgId
+    ? { organizationId: orgId }
+    : { createdBy: req.user!.id }
+
+  if (from && to) {
+    const fromDate = new Date((from as string) + 'T00:00:00Z')
+    const toDate   = new Date((to   as string) + 'T23:59:59Z')
+    where.OR = [
+      // Schedules with explicit fromDate/toDate range set
+      { fromDate: { lte: toDate }, toDate: { gte: fromDate } },
+      // Fallback: schedules without fromDate/toDate – use weekStartDate in range
+      { fromDate: null, toDate: null, weekStartDate: { gte: fromDate, lte: toDate } },
+    ]
+  }
+  if (lobId) where.lobId = lobId as string
+
   const schedules = await prisma.schedule.findMany({
-    where: orgId ? { organizationId: orgId } : { createdBy: req.user!.id },
+    where,
     orderBy: { createdAt: 'desc' },
     select: {
-      id: true, name: true, weekStartDate: true, status: true,
-      createdBy: true, createdAt: true, updatedAt: true,
-      projectionsJson: true,
+      id: true, name: true, weekStartDate: true, fromDate: true, toDate: true,
+      lobId: true, status: true, createdBy: true, createdAt: true, updatedAt: true,
+      settingsJson: true, projectionsJson: true, agentsJson: true,
+      rosterJson: true, requiredJson: true,
     },
   })
   res.json(schedules)

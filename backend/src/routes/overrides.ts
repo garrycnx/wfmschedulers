@@ -6,19 +6,27 @@ import { requireAuth, AuthRequest } from '../middleware/auth'
 const router = Router()
 router.use(requireAuth)
 
-// ── GET /api/agents/:id/overrides?year=2026&month=3 ──────────────────────────
+// ── GET /api/agents/:id/overrides?year=2026&month=3
+//                               OR ?from=2026-03-01&to=2026-03-31 ───────────
 router.get('/:id/overrides', async (req: AuthRequest, res: Response) => {
-  const { year, month } = req.query
-  const y = parseInt(year as string) || new Date().getFullYear()
-  const m = parseInt(month as string) || new Date().getMonth() + 1
+  const { year, month, from, to } = req.query
+  let fromDate: Date, toDate: Date
 
-  const from = new Date(Date.UTC(y, m - 1, 1))
-  const to   = new Date(Date.UTC(y, m, 1)) // first day of next month
+  if (from && to) {
+    fromDate = new Date((from as string) + 'T00:00:00Z')
+    toDate   = new Date((to   as string) + 'T00:00:00Z')
+    toDate.setUTCDate(toDate.getUTCDate() + 1) // make end inclusive
+  } else {
+    const y = parseInt(year as string) || new Date().getFullYear()
+    const m = parseInt(month as string) || new Date().getMonth() + 1
+    fromDate = new Date(Date.UTC(y, m - 1, 1))
+    toDate   = new Date(Date.UTC(y, m, 1))
+  }
 
   const overrides = await prisma.shiftDayOverride.findMany({
     where: {
       agentId: req.params.id,
-      overrideDate: { gte: from, lt: to },
+      overrideDate: { gte: fromDate, lt: toDate },
     },
     orderBy: { overrideDate: 'asc' },
   })
