@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import { schedulesApi } from '../api/client'
 import { useScheduleStore } from '../store/scheduleStore'
 import type { ReleaseHistoryEntry } from '../store/scheduleStore'
+import ChannelTimeline from '../components/scheduling/ChannelTimeline'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface BackendSchedule {
@@ -157,9 +158,15 @@ export default function ScheduleDetail() {
   const createdAt =
     backendSchedule?.createdAt ?? localEntry?.releasedAt ?? ''
 
+  // ── Parse slotAgents from backend schedule ──────────────────────────────────
+  let slotAgents: Array<{ id: string; agentId?: string; start: number; end: number; off: string[] }> = []
+  if (backendSchedule) {
+    try { slotAgents = JSON.parse((backendSchedule as { agentsJson?: string }).agentsJson ?? '[]') } catch { /* ignore */ }
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6 animate-fade-in max-w-2xl">
+    <div className="space-y-6 animate-fade-in max-w-4xl">
 
       {/* Header */}
       <div className="flex items-center gap-3">
@@ -286,6 +293,11 @@ export default function ScheduleDetail() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Agent Channel View */}
+      {isReady && (
+        <ChannelTimeline slotAgents={slotAgents} />
       )}
     </div>
   )

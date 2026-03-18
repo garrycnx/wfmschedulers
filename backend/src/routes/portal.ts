@@ -95,4 +95,101 @@ router.get('/schedule/:agentCode', async (req: Request, res: Response) => {
   }
 })
 
+// ─── Portal Leave endpoints (public – agent authenticated by agentId in body) ─
+
+// GET /api/portal/leave/balances/:agentId
+router.get('/leave/balances/:agentId', async (req: Request, res: Response) => {
+  try {
+    const year = req.query.year ? Number(req.query.year) : new Date().getFullYear()
+    const balances = await prisma.leaveBalance.findMany({
+      where: { agentId: req.params.agentId, year },
+    })
+    res.json(balances)
+  } catch {
+    res.status(500).json({ error: 'Internal server error.' })
+  }
+})
+
+// GET /api/portal/leave/requests/:agentId
+router.get('/leave/requests/:agentId', async (req: Request, res: Response) => {
+  try {
+    const requests = await prisma.leaveRequest.findMany({
+      where: { agentId: req.params.agentId },
+      orderBy: { createdAt: 'desc' },
+    })
+    res.json(requests)
+  } catch {
+    res.status(500).json({ error: 'Internal server error.' })
+  }
+})
+
+// POST /api/portal/leave/requests – agent submits leave
+router.post('/leave/requests', async (req: Request, res: Response) => {
+  try {
+    const { agentId, leaveType, startDate, endDate, durationType, totalHours, notes } = req.body as {
+      agentId: string; leaveType: string; startDate: string; endDate: string
+      durationType: string; totalHours: number; notes?: string
+    }
+    if (!agentId || !leaveType || !startDate || !endDate || !durationType || !totalHours) {
+      return res.status(400).json({ error: 'Missing required fields.' })
+    }
+
+    // Verify agent exists
+    const agent = await prisma.agent.findUnique({ where: { id: agentId } })
+    if (!agent) return res.status(404).json({ error: 'Agent not found.' })
+
+    // Validate balance
+    const year    = new Date(startDate).getFullYear()
+    const balance = await prisma.leaveBalance.findUnique({
+      where: { agentId_leaveType_year: { agentId, leaveType, year } },
+    })
+    if (balance) {
+      const remaining = balance.totalHours - balance.usedHours
+      if (totalHours > remaining) {
+        return res.status(400).json({
+          error: `Insufficient ${leaveType} leave. Available: ${remaining}h, Requested: ${totalHours}h`,
+        })
+      }
+    }
+
+    // Check max per day
+    const quota = await prisma.leaveQuota.findFirst({
+      where: { organizationId: agent.organizationId, leaveType },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (quota) {
+      const overlapping = await prisma.leaveRequest.count({
+        where: {
+          organizationId: agent.organizationId,
+          leaveType,
+          status: 'approved',
+          startDate: { lte: new Date(endDate) },
+          endDate:   { gte: new Date(startDate) },
+        },
+      })
+      if (overlapping >= quota.maxPerDay) {
+        return res.status(400).json({
+          error: `Maximum ${quota.maxPerDay} agents can take ${leaveType} leave on overlapping days.`,
+        })
+      }
+    }
+
+    const request = await prisma.leaveRequest.create({
+      data: {
+        agentId,
+        leaveType,
+        startDate:      new Date(startDate),
+        endDate:        new Date(endDate),
+        durationType,
+        totalHours,
+        notes:          notes ?? null,
+        organizationId: agent.organizationId,
+      },
+    })
+    res.status(201).json(request)
+  } catch {
+    res.status(500).json({ error: 'Internal server error.' })
+  }
+})
+
 export default router

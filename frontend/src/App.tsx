@@ -11,6 +11,7 @@ import ScheduleHistory from './pages/ScheduleHistory'
 import ScheduleDetail from './pages/ScheduleDetail'
 import AgentPortal from './pages/AgentPortal'
 import Settings from './pages/Settings'
+import LeaveManagement from './pages/LeaveManagement'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="lobs" element={<LobManagement />} />
         <Route path="schedules" element={<ScheduleHistory />} />
         <Route path="schedules/:id" element={<ScheduleDetail />} />
+        <Route path="leave" element={<LeaveManagement />} />
         <Route path="settings" element={<Settings />} />
       </Route>
 

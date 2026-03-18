@@ -12,6 +12,8 @@ import schedulesRouter from './routes/schedules'
 import portalRouter from './routes/portal'
 import overridesRouter from './routes/overrides'
 import lobsRouter from './routes/lobs'
+import leaveRouter from './routes/leave'
+import channelsRouter from './routes/channels'
 import { errorHandler } from './middleware/errorHandler'
 
 const app = express()
@@ -41,6 +43,8 @@ app.use('/api/agents',    overridesRouter)   // shift day overrides: /api/agents
 app.use('/api/lobs',      lobsRouter)
 app.use('/api/schedules', schedulesRouter)
 app.use('/api/portal',    portalRouter)   // public – no auth required
+app.use('/api',           leaveRouter)    // leave quotas, requests, balances
+app.use('/api',           channelsRouter) // channel assignments
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }))
 

@@ -60,3 +60,39 @@ export const authApi = {
   me: () => apiClient.get('/auth/me'),
   logout: () => apiClient.post('/auth/logout'),
 }
+
+export const leaveApi = {
+  // Quotas
+  listQuotas: (lobId?: string) => apiClient.get(`/leave-quotas${lobId ? `?lobId=${lobId}` : ''}`),
+  createQuota: (data: unknown) => apiClient.post('/leave-quotas', data),
+  updateQuota: (id: string, data: unknown) => apiClient.put(`/leave-quotas/${id}`, data),
+  deleteQuota: (id: string) => apiClient.delete(`/leave-quotas/${id}`),
+  // Requests
+  listRequests: (params?: { status?: string; agentId?: string }) => {
+    const q = new URLSearchParams()
+    if (params?.status) q.set('status', params.status)
+    if (params?.agentId) q.set('agentId', params.agentId)
+    return apiClient.get(`/leave-requests${q.toString() ? `?${q}` : ''}`)
+  },
+  createRequest: (data: unknown) => apiClient.post('/leave-requests', data),
+  approveRequest: (id: string) => apiClient.patch(`/leave-requests/${id}/approve`),
+  rejectRequest:  (id: string) => apiClient.patch(`/leave-requests/${id}/reject`),
+  // Balances
+  getBalances: (agentId: string, year?: number) =>
+    apiClient.get(`/leave-balances/${agentId}${year ? `?year=${year}` : ''}`),
+  listBalances: (year?: number) =>
+    apiClient.get(`/leave-balances${year ? `?year=${year}` : ''}`),
+  allocateBalance: (data: unknown) => apiClient.post('/leave-balances', data),
+}
+
+export const channelApi = {
+  list: (params?: { agentId?: string; date?: string }) => {
+    const q = new URLSearchParams()
+    if (params?.agentId) q.set('agentId', params.agentId)
+    if (params?.date)    q.set('date', params.date)
+    return apiClient.get(`/channel-assignments${q.toString() ? `?${q}` : ''}`)
+  },
+  bulkUpsert: (agentId: string, date: string, assignments: unknown[]) =>
+    apiClient.put('/channel-assignments', { agentId, date, assignments }),
+  delete: (id: string) => apiClient.delete(`/channel-assignments/${id}`),
+}

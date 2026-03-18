@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, BarChart, Bar, Legend,
+  ResponsiveContainer, Bar, Legend, ComposedChart, Line,
 } from 'recharts'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
@@ -156,6 +156,9 @@ export default function Dashboard() {
   const [ovLoading,   setOvLoading]   = useState(false)
   const [overrideMap, setOverrideMap] = useState<OverrideMap>({})
 
+  // Staffing chart date picker
+  const [staffingDate, setStaffingDate] = useState(toDateStr(new Date()))
+
   // Edit cell state
   const [editCell,  setEditCell]  = useState<{ agentId: string; date: string; agentName: string } | null>(null)
   const [editStart, setEditStart] = useState('')
@@ -248,36 +251,28 @@ export default function Dashboard() {
     })
   }, [parsed, dateFrom, dateTo])
 
-  // ── Interval staffing chart ───────────────────────────────────────
+  // ── Interval staffing chart (single day) ─────────────────────────
   const staffingChartData = useMemo(() => {
+    const date   = parseLoc(staffingDate)
+    const day    = getWfmDay(date)
+    const sch    = parsed.find(s => s.range.from <= staffingDate && s.range.to >= staffingDate)
+    if (!sch) return []
+
     const out: { slot: string; staffed: number; required: number }[] = []
     for (let min = 0; min < 24 * 60; min += 30) {
-      let staffedSum = 0, requiredSum = 0, count = 0
-      for (const s of parsed) {
-        for (const day of WFM_DAYS) {
-          // Only count weekdays that actually have scheduled agents
-          const hasWork = s.roster.some(rr => parseShift(rr[day] ?? '') !== null)
-          if (!hasWork) continue
-          const atSlot = s.roster.filter(rr => {
-            const sh = parseShift(rr[day] ?? '')
-            return sh && sh.start <= min && min < sh.end
-          }).length
-          const req = s.required.find(r => r.weekday === day && r.slotMin === min)
-          staffedSum  += atSlot
-          requiredSum += req?.required ?? 0
-          count++
-        }
-      }
-      if (count > 0 && (staffedSum > 0 || requiredSum > 0)) {
-        out.push({
-          slot:     minToStr(min),
-          staffed:  +(staffedSum  / count).toFixed(1),
-          required: +(requiredSum / count).toFixed(1),
-        })
+      // Count agents from roster working this slot on this day
+      const staffed = sch.roster.filter(rr => {
+        const sh = parseShift(rr[day] ?? '')
+        return sh && sh.start <= min && min < sh.end
+      }).length
+      const req = sch.required.find(r => r.weekday === day && r.slotMin === min)
+      const required = req?.required ?? 0
+      if (staffed > 0 || required > 0) {
+        out.push({ slot: minToStr(min), staffed, required })
       }
     }
     return out
-  }, [parsed])
+  }, [parsed, staffingDate])
 
   // ── Grid dates + date → schedule map ─────────────────────────────
   const gridDates = useMemo(() => dateRange(dateFrom, dateTo), [dateFrom, dateTo])
@@ -536,13 +531,24 @@ export default function Dashboard() {
 
             {/* Interval staffing */}
             <div className="bg-white border border-gray-200 rounded-2xl p-5">
-              <div className="mb-5">
+              <div className="mb-4">
                 <h3 className="text-sm font-semibold text-gray-900">Interval Staffing</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Avg agents on shift vs. required (30-min)</p>
+                <p className="text-xs text-gray-500 mt-0.5">Staffed vs. Required agents (30-min intervals)</p>
+              </div>
+              <div className="mb-4">
+                <label className="label">Select Date</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={staffingDate}
+                  min={dateFrom}
+                  max={dateTo}
+                  onChange={e => setStaffingDate(e.target.value)}
+                />
               </div>
               {staffingChartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={staffingChartData} margin={{ top: 5, right: 0, left: -30, bottom: 0 }}>
+                <ResponsiveContainer width="100%" height={200}>
+                  <ComposedChart data={staffingChartData} margin={{ top: 5, right: 0, left: -30, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="slot" tick={{ fontSize: 9, fill: '#6b7280' }} interval={3} />
                     <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} />
@@ -552,13 +558,13 @@ export default function Dashboard() {
                       itemStyle={{ fontSize: 12 }}
                     />
                     <Legend iconSize={10} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                    <Bar dataKey="staffed"  name="Staffed"  fill="#6370fa" radius={[3,3,0,0]} />
-                    <Bar dataKey="required" name="Required" fill="#f59e0b" radius={[3,3,0,0]} fillOpacity={0.7} />
-                  </BarChart>
+                    <Bar dataKey="staffed" name="Staffed" fill="#6370fa" radius={[3,3,0,0]} fillOpacity={0.85} />
+                    <Line type="monotone" dataKey="required" name="Required" stroke="#f59e0b" strokeWidth={2} dot={false} strokeDasharray="4 2" />
+                  </ComposedChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="flex items-center justify-center h-[220px] text-gray-400 text-sm">
-                  No staffing data available
+                <div className="flex items-center justify-center h-[200px] text-gray-400 text-sm">
+                  No staffing data for {staffingDate}
                 </div>
               )}
             </div>

@@ -4,7 +4,7 @@ import { clsx } from 'clsx'
 import {
   LayoutDashboard, CalendarDays, Users, History,
   Settings, LogOut, ChevronLeft, ChevronRight,
-  Sparkles, ExternalLink, Briefcase,
+  Sparkles, ExternalLink, Briefcase, CalendarOff,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 
@@ -14,17 +14,19 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/generate',   icon: Sparkles,        label: 'Generate Schedule' },
-  { to: '/agents',     icon: Users,           label: 'Agents' },
-  { to: '/lobs',       icon: Briefcase,       label: 'Lines of Business' },
-  { to: '/schedules',  icon: History,         label: 'Schedule History' },
-  { to: '/settings',   icon: Settings,        label: 'Settings' },
+  { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard',          roles: ['admin', 'manager'] },
+  { to: '/generate',   icon: Sparkles,        label: 'Generate Schedule',  roles: ['admin', 'manager'] },
+  { to: '/agents',     icon: Users,           label: 'Agents',             roles: ['admin', 'manager'] },
+  { to: '/lobs',       icon: Briefcase,       label: 'Lines of Business',  roles: ['admin', 'manager'] },
+  { to: '/schedules',  icon: History,         label: 'Schedule History',   roles: ['admin', 'manager'] },
+  { to: '/leave',      icon: CalendarOff,     label: 'Leave Management',   roles: ['admin', 'manager'] },
+  { to: '/settings',   icon: Settings,        label: 'Settings',           roles: ['admin', 'manager'] },
 ]
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
+  const userRole = user?.role ?? 'manager'
 
   const handleLogout = () => {
     logout()
@@ -83,7 +85,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto overflow-x-hidden">
-        {navItems.map(({ to, icon: Icon, label }) => (
+        {navItems.filter(item => item.roles.includes(userRole)).map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}

@@ -15,10 +15,15 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users     User[]
-  agents    Agent[]
-  schedules Schedule[]
-  lobs      LineOfBusiness[]
+  users              User[]
+  agents             Agent[]
+  schedules          Schedule[]
+  lobs               LineOfBusiness[]
+  leaveQuotas        LeaveQuota[]
+  leaveRequests      LeaveRequest[]
+  leaveBalances      LeaveBalance[]
+  leaveTypeConfigs   LeaveTypeConfig[]
+  channelAssignments ChannelAssignment[]
 }
 
 // Line of Business – e.g. "Customer Service", "Tech Support"
@@ -82,8 +87,11 @@ model Agent {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  agentSchedules AgentScheduleEntry[]
-  shiftOverrides ShiftDayOverride[]
+  agentSchedules     AgentScheduleEntry[]
+  shiftOverrides     ShiftDayOverride[]
+  leaveRequests      LeaveRequest[]
+  leaveBalances      LeaveBalance[]
+  channelAssignments ChannelAssignment[]
 
   @@unique([agentCode, organizationId])
 }
@@ -141,4 +149,79 @@ model AgentScheduleEntry {
   createdAt  DateTime @default(now())
 
   @@unique([scheduleId, agentId])
+}
+
+// ─── Leave Management ─────────────────────────────────────────────────────────
+
+model LeaveQuota {
+  id             String   @id @default(cuid())
+  organizationId String
+  lobId          String?
+  leaveType      String   // "Annual" | "Sick" | "Emergency" | "Unpaid"
+  totalHours     Float
+  periodStart    DateTime
+  periodEnd      DateTime
+  maxPerDay      Int      @default(3)
+  createdAt      DateTime @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model LeaveRequest {
+  id             String    @id @default(cuid())
+  organizationId String
+  agentId        String
+  leaveType      String
+  startDate      DateTime
+  endDate        DateTime
+  durationType   String    // "full_day" | "half_day_am" | "half_day_pm"
+  totalHours     Float
+  status         String    @default("pending") // "pending" | "approved" | "rejected"
+  notes          String?
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  agent          Agent     @relation(fields: [agentId], references: [id])
+}
+
+model LeaveBalance {
+  id             String   @id @default(cuid())
+  organizationId String
+  agentId        String
+  leaveType      String
+  totalHours     Float    @default(0)
+  usedHours      Float    @default(0)
+  year           Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  agent          Agent    @relation(fields: [agentId], references: [id])
+  @@unique([agentId, leaveType, year])
+}
+
+// Custom leave types defined by the scheduler
+model LeaveTypeConfig {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String   // e.g. "Annual", "Sick", "Maternity", "Paternity"
+  description    String?
+  color          String   @default("#6366f1") // hex color for UI badges
+  isPaid         Boolean  @default(true)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([name, organizationId])
+}
+
+model ChannelAssignment {
+  id             String   @id @default(cuid())
+  organizationId String
+  agentId        String
+  scheduleId     String?
+  date           DateTime
+  slotMin        Int
+  channel        String   // "voice" | "chat" | "email" | "backoffice"
+  createdAt      DateTime @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  agent          Agent    @relation(fields: [agentId], references: [id])
 }

@@ -1,14 +1,48 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import {
   CalendarDays, Clock, Coffee, Utensils, LogOut,
   Sun, ChevronLeft, ChevronRight, Info, KeyRound, Eye, EyeOff, AlertCircle,
+  CalendarOff, Plus, X,
 } from 'lucide-react'
 import type { RosterRow, BreakRow } from '../types'
 
 const PORTAL_API = `${import.meta.env.VITE_API_URL ?? ''}/api/portal`
+
+type LeaveType = 'Annual' | 'Sick' | 'Emergency' | 'Unpaid'
+const LEAVE_TYPES: LeaveType[] = ['Annual', 'Sick', 'Emergency', 'Unpaid']
+
+interface LeaveBalance {
+  id:         string
+  leaveType:  LeaveType
+  totalHours: number
+  usedHours:  number
+  year:       number
+}
+
+interface LeaveRequest {
+  id:           string
+  leaveType:    LeaveType
+  startDate:    string
+  endDate:      string
+  durationType: string
+  totalHours:   number
+  status:       string
+  notes:        string | null
+  createdAt:    string
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  pending:  'bg-amber-50 text-amber-700 border border-amber-200',
+  approved: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  rejected: 'bg-red-50 text-red-600 border border-red-200',
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
 
 interface OverrideEntry { isOff: boolean; shiftStart: string | null; shiftEnd: string | null }
 
@@ -386,7 +420,22 @@ export default function AgentPortal() {
   const [loggedIn,     setLoggedIn]     = useState(false)
   const [agentName,    setAgentName]    = useState('')
   const [agentCode,    setAgentCode]    = useState('')
-  const [activeTab,    setActiveTab]    = useState<'week' | 'calendar'>('week')
+  const [agentDbId,    setAgentDbId]    = useState('')
+  const [activeTab,    setActiveTab]    = useState<'week' | 'calendar' | 'leave'>('week')
+
+  // Leave state
+  const [leaveBalances,  setLeaveBalances]  = useState<LeaveBalance[]>([])
+  const [leaveRequests,  setLeaveRequests]  = useState<LeaveRequest[]>([])
+  const [leaveLoading,   setLeaveLoading]   = useState(false)
+  const [showLeaveForm,  setShowLeaveForm]  = useState(false)
+
+  // Leave form
+  const [lStartDate,   setLStartDate]   = useState('')
+  const [lEndDate,     setLEndDate]     = useState('')
+  const [lLeaveType,   setLLeaveType]   = useState<LeaveType>('Annual')
+  const [lDuration,    setLDuration]    = useState<'full_day' | 'half_day_am' | 'half_day_pm'>('full_day')
+  const [lNotes,       setLNotes]       = useState('')
+  const [lSubmitting,  setLSubmitting]  = useState(false)
 
   // Login form state
   const [empId,        setEmpId]        = useState('')
@@ -396,6 +445,23 @@ export default function AgentPortal() {
   const [isLoggingIn,  setIsLoggingIn]  = useState(false)
 
   const [portalData, setPortalData] = useState<PortalData | null>(null)
+
+  async function loadLeaveData(agId: string) {
+    setLeaveLoading(true)
+    try {
+      const year = new Date().getFullYear()
+      const [balRes, reqRes] = await Promise.all([
+        axios.get(`${PORTAL_API}/leave/balances/${agId}?year=${year}`),
+        axios.get(`${PORTAL_API}/leave/requests/${agId}`),
+      ])
+      setLeaveBalances(balRes.data)
+      setLeaveRequests(reqRes.data)
+    } catch {
+      // silently fail if no leave data available
+    } finally {
+      setLeaveLoading(false)
+    }
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -422,6 +488,8 @@ export default function AgentPortal() {
       setLoggedIn(true)
       setAgentName(agent.name)
       setAgentCode(agent.agentCode)
+      setAgentDbId(agent.id ?? '')
+      if (agent.id) loadLeaveData(agent.id)
       toast.success(`Welcome back, ${agent.name.split(' ')[0]}!`)
     } catch (err: unknown) {
       const msg =
@@ -431,6 +499,50 @@ export default function AgentPortal() {
       setLoginError(msg)
     } finally {
       setIsLoggingIn(false)
+    }
+  }
+
+  // Refresh leave when tab is opened
+  useEffect(() => {
+    if (activeTab === 'leave' && agentDbId) {
+      loadLeaveData(agentDbId)
+    }
+  }, [activeTab, agentDbId])
+
+  async function submitLeave(e: React.FormEvent) {
+    e.preventDefault()
+    if (!lStartDate) { toast.error('Select a start date.'); return }
+    if (!lEndDate)   setLEndDate(lStartDate)
+
+    setLSubmitting(true)
+    try {
+      // Compute hours: full_day = 8h, half = 4h, per day
+      const start    = new Date(lStartDate)
+      const end      = new Date(lEndDate || lStartDate)
+      const days     = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1)
+      const hrsPerDay = lDuration === 'full_day' ? 8 : 4
+      const totalHours = days * hrsPerDay
+
+      await axios.post(`${PORTAL_API}/leave/requests`, {
+        agentId:      agentDbId,
+        leaveType:    lLeaveType,
+        startDate:    lStartDate,
+        endDate:      lEndDate || lStartDate,
+        durationType: lDuration,
+        totalHours,
+        notes:        lNotes || undefined,
+      })
+      toast.success('Leave request submitted!')
+      setShowLeaveForm(false)
+      setLStartDate(''); setLEndDate(''); setLNotes('')
+      loadLeaveData(agentDbId)
+    } catch (err: unknown) {
+      const msg = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Failed to submit leave request.'
+      toast.error(msg)
+    } finally {
+      setLSubmitting(false)
     }
   }
 
@@ -580,7 +692,7 @@ export default function AgentPortal() {
       <main className="max-w-3xl mx-auto p-6 space-y-5">
         {/* Tabs */}
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-          {(['week', 'calendar'] as const).map((tab) => (
+          {([['week', 'Weekly View'], ['calendar', 'Calendar'], ['leave', 'Leave']] as const).map(([tab, label]) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -590,13 +702,174 @@ export default function AgentPortal() {
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              {tab === 'week' ? 'Weekly View' : 'Calendar'}
+              {label}
             </button>
           ))}
         </div>
 
         {/* ── CALENDAR TAB ── */}
         {activeTab === 'calendar' && <MiniCalendar dateMap={dateMap} />}
+
+        {/* ── LEAVE TAB ── */}
+        {activeTab === 'leave' && (
+          <div className="space-y-5">
+
+            {/* Balance cards */}
+            <div className="grid grid-cols-2 gap-3">
+              {LEAVE_TYPES.map(lt => {
+                const bal = leaveBalances.find(b => b.leaveType === lt)
+                const remaining = bal ? bal.totalHours - bal.usedHours : 0
+                const total     = bal?.totalHours ?? 0
+                const pct       = total > 0 ? (remaining / total) * 100 : 0
+                return (
+                  <div key={lt} className="card p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{lt}</span>
+                      <CalendarOff className="w-4 h-4 text-gray-300" />
+                    </div>
+                    <p className="text-xl font-bold text-gray-900">{remaining}h</p>
+                    <p className="text-xs text-gray-400 mt-0.5">of {total}h remaining</p>
+                    <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2">
+                      <div
+                        className={`h-1.5 rounded-full transition-all ${
+                          pct > 50 ? 'bg-emerald-500' : pct > 20 ? 'bg-amber-500' : 'bg-red-500'
+                        }`}
+                        style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Apply for leave button */}
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900">Leave History</h3>
+              {!showLeaveForm && (
+                <button
+                  onClick={() => setShowLeaveForm(true)}
+                  className="flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white font-semibold
+                             rounded-xl px-3 py-2 text-sm transition-all shadow-glow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  Apply for Leave
+                </button>
+              )}
+            </div>
+
+            {/* Leave application form */}
+            <AnimatePresence>
+              {showLeaveForm && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.18 }}
+                  className="card p-5"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="font-bold text-gray-900 text-sm">Apply for Leave</h4>
+                    <button onClick={() => setShowLeaveForm(false)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <form onSubmit={submitLeave} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="label">Start Date</label>
+                        <input type="date" className="input" value={lStartDate}
+                          onChange={e => { setLStartDate(e.target.value); if (!lEndDate) setLEndDate(e.target.value) }} required />
+                      </div>
+                      <div>
+                        <label className="label">End Date</label>
+                        <input type="date" className="input" value={lEndDate} min={lStartDate}
+                          onChange={e => setLEndDate(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="label">Leave Type</label>
+                        <select className="input" value={lLeaveType} onChange={e => setLLeaveType(e.target.value as LeaveType)}>
+                          {LEAVE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label">Duration</label>
+                        <select className="input" value={lDuration} onChange={e => setLDuration(e.target.value as typeof lDuration)}>
+                          <option value="full_day">Full Day</option>
+                          <option value="half_day_am">Half Day (AM)</option>
+                          <option value="half_day_pm">Half Day (PM)</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="label">Notes (optional)</label>
+                      <textarea className="input resize-none" rows={2} value={lNotes}
+                        onChange={e => setLNotes(e.target.value)} placeholder="Reason for leave…" />
+                    </div>
+                    <div className="flex gap-3">
+                      <button type="button" onClick={() => setShowLeaveForm(false)}
+                        className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-500 border border-gray-200 hover:bg-gray-50">
+                        Cancel
+                      </button>
+                      <button type="submit" disabled={lSubmitting}
+                        className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold bg-brand-600 hover:bg-brand-500
+                                   text-white transition-all disabled:opacity-50">
+                        {lSubmitting ? 'Submitting…' : 'Submit Request'}
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Leave history table */}
+            {leaveLoading ? (
+              <div className="text-center text-gray-400 py-6 text-sm">Loading leave history…</div>
+            ) : leaveRequests.length === 0 ? (
+              <div className="card p-8 text-center">
+                <CalendarOff className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                <p className="text-sm text-gray-400">No leave requests yet.</p>
+              </div>
+            ) : (
+              <div className="card overflow-hidden">
+                <table className="wfm-table w-full">
+                  <thead>
+                    <tr>
+                      <th className="text-left">Dates</th>
+                      <th className="text-center">Type</th>
+                      <th className="text-center">Hours</th>
+                      <th className="text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leaveRequests.map(r => (
+                      <tr key={r.id}>
+                        <td className="text-xs text-gray-700">
+                          {fmtDate(r.startDate)}
+                          {r.startDate !== r.endDate && ` → ${fmtDate(r.endDate)}`}
+                          <div className="text-gray-400 mt-0.5 capitalize">{r.durationType.replace(/_/g, ' ')}</div>
+                        </td>
+                        <td className="text-center">
+                          <span className="text-xs font-semibold px-2 py-1 rounded-lg bg-brand-50 text-brand-700">
+                            {r.leaveType}
+                          </span>
+                        </td>
+                        <td className="text-center font-semibold text-gray-700 text-sm">{r.totalHours}h</td>
+                        <td className="text-center">
+                          <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${STATUS_COLORS[r.status] ?? ''}`}>
+                            {r.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── WEEKLY VIEW TAB ── */}
         {activeTab === 'week' && (
