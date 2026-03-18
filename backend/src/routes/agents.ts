@@ -35,6 +35,45 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
   res.json(agent)
 })
 
+// POST /api/agents/bulk – create multiple agents from Excel upload
+router.post('/bulk', async (req: AuthRequest, res: Response) => {
+  const BulkSchema = z.object({ agents: z.array(AgentSchema) })
+  const { agents: rows } = BulkSchema.parse(req.body)
+  const orgId = req.user!.organizationId ?? 'default'
+
+  const created: string[] = []
+  const failed: { row: number; name: string; error: string }[] = []
+
+  let count = await prisma.agent.count({ where: { organizationId: orgId } })
+
+  for (let i = 0; i < rows.length; i++) {
+    const { employeeCode, ...agentFields } = rows[i]
+    const agentCode = employeeCode?.trim()
+      ? employeeCode.trim().toUpperCase()
+      : `AG${String(count + 1).padStart(3, '0')}`
+    try {
+      const existing = await prisma.agent.findFirst({ where: { agentCode, organizationId: orgId } })
+      if (existing) {
+        failed.push({ row: i + 2, name: agentFields.name, error: `Employee ID "${agentCode}" already exists` })
+        continue
+      }
+      const dupEmail = await prisma.agent.findFirst({ where: { email: agentFields.email, organizationId: orgId } })
+      if (dupEmail) {
+        failed.push({ row: i + 2, name: agentFields.name, error: `Email "${agentFields.email}" already exists` })
+        continue
+      }
+      await prisma.agent.create({
+        data: { ...agentFields, hireDate: new Date(agentFields.hireDate), agentCode, organizationId: orgId },
+      })
+      created.push(agentCode)
+      count++
+    } catch (err: unknown) {
+      failed.push({ row: i + 2, name: agentFields.name, error: String(err) })
+    }
+  }
+  res.status(201).json({ created: created.length, failed })
+})
+
 // POST /api/agents
 router.post('/', async (req: AuthRequest, res: Response) => {
   const data = AgentSchema.parse(req.body)

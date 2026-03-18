@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Plus, Edit2, Trash2, Send, CalendarDays } from 'lucide-react'
+import { Search, Plus, Edit2, Trash2, Send, CalendarDays, FileSpreadsheet } from 'lucide-react'
 import toast from 'react-hot-toast'
 import type { Agent, AgentFormData, AgentStatus, SkillLevel } from '../types'
 import AgentModal from '../components/agents/AgentModal'
 import ShiftCalendarModal from '../components/agents/ShiftCalendarModal'
+import AgentUploadModal from '../components/agents/AgentUploadModal'
 import { useAgentStore } from '../store/agentStore'
 import { useLobStore } from '../store/lobStore'
 import { useScheduleStore } from '../store/scheduleStore'
@@ -36,6 +37,7 @@ export default function AgentManagement() {
   useEffect(() => { fetchAgents() }, [])
   const [statusFilter, setStatusFilter] = useState<AgentStatus | 'all'>('all')
   const [modalOpen, setModalOpen] = useState(false)
+  const [uploadOpen, setUploadOpen] = useState(false)
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null)
   const [calendarAgent, setCalendarAgent] = useState<Agent | null>(null)
 
@@ -133,6 +135,14 @@ export default function AgentManagement() {
           </select>
         </div>
 
+        <button
+          onClick={() => setUploadOpen(true)}
+          className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 font-semibold
+                     border border-gray-200 rounded-xl px-4 py-2.5 text-sm transition-all shrink-0"
+        >
+          <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+          Import Excel
+        </button>
         <button
           onClick={() => { setEditingAgentId(null); setModalOpen(true) }}
           className="flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white font-semibold
@@ -310,6 +320,14 @@ export default function AgentManagement() {
         open={!!calendarAgent}
         agent={calendarAgent}
         onClose={() => setCalendarAgent(null)}
+      />
+
+      {/* Excel upload modal */}
+      <AgentUploadModal
+        open={uploadOpen}
+        lobs={lobs}
+        onClose={() => setUploadOpen(false)}
+        onSuccess={() => { fetchAgents(); setUploadOpen(false) }}
       />
     </div>
   )
