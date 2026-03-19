@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import jwt from 'jsonwebtoken'
 import axios from 'axios'
-import bcrypt from 'bcrypt'
+import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { prisma } from '../config/database'
 import { requireAuth, requireRole, AuthRequest } from '../middleware/auth'
