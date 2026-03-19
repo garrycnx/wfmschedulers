@@ -190,31 +190,29 @@ export function generateRoster(
     }
   }
 
-  // ── Pruning: day-level SLA + peak interval protection ───────────────────────
-  // • Day-weighted SLA must stay >= slaFrac (allows off-peak relaxation)
-  // • Abandon rate must stay <= abandonFrac
-  // • Peak intervals (vol >= 55% of day avg) must keep >= required agent count
+  // ── Pruning: aggressively remove agents while staying within SLA/abandon targets ──
+  // Rules:
+  //  1. Day-weighted SLA must stay >= slaTarget (80%)
+  //  2. Day-weighted abandon must stay <= abandonTarget + 2% tolerance (prune buffer)
+  //  3. Per-interval gap must be >= required - 2  (max deficit of 2)
+  //  4. Per-interval gap must be <= required + 3  (max surplus of 3 — forces deeper pruning)
   const mu = 1 / (settings.ahtSeconds / 60)
   const theta = 1 / (settings.patienceSeconds / 60)
   const tSla = settings.slaThresholdSeconds / 60
-  const slaFrac = settings.slaTargetPct / 100
+  const slaFrac    = settings.slaTargetPct    / 100
   const abandonFrac = settings.abandonTargetPct / 100
   const intervalLen = settings.intervalFormat === '15 minutes' ? 15 : 30
+  // Small tolerance so abandon doesn't block pruning at the exact boundary
+  const abandonCeiling = abandonFrac + 0.02
 
-  // Volume lookup & per-day peak threshold
+  // Volume lookup
   const volLookup: Record<string, Record<string, number>> = {}
   for (const fr of forecastRows) {
     if (!volLookup[fr.weekday]) volLookup[fr.weekday] = {}
     volLookup[fr.weekday][minToTime(fr.slotMin)] = fr.volume
   }
-  const peakThreshold: Record<string, number> = {}
-  for (const wd of WEEKDAYS) {
-    const vols = allSlots.map((t) => volLookup[wd]?.[minToTime(t)] ?? 0).filter((v) => v > 0)
-    const avg = vols.length ? vols.reduce((s, v) => s + v, 0) / vols.length : 0
-    peakThreshold[wd] = avg * 0.55
-  }
 
-  // Baseline required counts (used for peak slot protection)
+  // Baseline required counts
   const baselineReq: Record<string, Record<string, number>> = {}
   for (const r of requiredStaff) {
     if (!baselineReq[r.weekday]) baselineReq[r.weekday] = {}
@@ -224,11 +222,14 @@ export function generateRoster(
   function daySlaMetrics(testCounts: Record<string, Record<string, number>>, wd: string) {
     let slaAcc = 0; let abnAcc = 0; let totCalls = 0
     for (const t of allSlots) {
-      const lbl = minToTime(t)
+      const lbl   = minToTime(t)
       const calls = volLookup[wd]?.[lbl] ?? 0
       if (calls === 0) continue
       const sched = testCounts[wd]?.[lbl] ?? 0
-      if (sched === 0) { totCalls += calls; abnAcc += calls; continue }
+      if (sched === 0) {
+        // 0-agent interval: all calls abandon — count against day SLA/abandon
+        totCalls += calls; abnAcc += calls; continue
+      }
       const a = (calls / intervalLen) / mu
       const { slaEst, pAbandon } = erlangAEstimates(a, sched, mu, theta, tSla)
       slaAcc += slaEst * calls
@@ -244,33 +245,31 @@ export function generateRoster(
   let pruned = [...agents]
   let improved = true
   let loops = 0
-  while (improved && loops < 300) {
+  while (improved && loops < 500) {
     loops++; improved = false
     for (let i = pruned.length - 1; i >= 0; i--) {
-      const agent = pruned[i]
-      const test = [...pruned.slice(0, i), ...pruned.slice(i + 1)]
+      const agent     = pruned[i]
+      const test      = [...pruned.slice(0, i), ...pruned.slice(i + 1)]
       const testCounts = buildScheduledCounts(test, allSlots)
-      const workDays = WEEKDAYS.filter((wd) => !agent.off.includes(wd))
+      const workDays  = WEEKDAYS.filter((wd) => !agent.off.includes(wd))
       let ok = true
 
       for (const wd of workDays) {
         if (!ok) break
 
-        // 1. Day-level SLA + abandon check (allows off-peak relaxation)
+        // Rule 1 & 2: day-level SLA and abandon (with small abandon tolerance)
         const { sla, abn } = daySlaMetrics(testCounts, wd)
-        if (sla < slaFrac || abn > abandonFrac) { ok = false; break }
+        if (sla < slaFrac || abn > abandonCeiling) { ok = false; break }
 
-        // 2. Interval gap constraint: staffed must be within [-2, +3] of required.
-        //    Allows minor deficits at off-peak slots while day-level SLA stays met.
+        // Rule 3 & 4: per-interval gap must stay in [-2, +3]
         for (const t of allSlots) {
-          const lbl = minToTime(t)
-          const vol = volLookup[wd]?.[lbl] ?? 0
+          const lbl  = minToTime(t)
+          const vol  = volLookup[wd]?.[lbl] ?? 0
           if (vol === 0) continue
           const reqV = baselineReq[wd]?.[lbl] ?? 0
           if (reqV === 0) continue
           const actual = testCounts[wd]?.[lbl] ?? 0
-          // Enforce minimum gap of -2 (can be at most 2 below required)
-          if (actual < reqV - 2) { ok = false; break }
+          if (actual < reqV - 2) { ok = false; break }   // too understaffed
         }
       }
 
