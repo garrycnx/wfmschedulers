@@ -2,11 +2,11 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import {
-  Users, CalendarCheck, TrendingUp, Activity, Plus, X, LayoutGrid,
+  Users, CalendarCheck, TrendingUp, Activity, Plus, X, LayoutGrid, Maximize2, Minimize2,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Bar, Legend, ComposedChart, Line,
+  ResponsiveContainer, Bar, Legend, ComposedChart, Line, Cell, ReferenceLine,
 } from 'recharts'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
@@ -158,6 +158,7 @@ export default function Dashboard() {
 
   // Staffing chart date picker
   const [staffingDate, setStaffingDate] = useState(toDateStr(new Date()))
+  const [expandStaffing, setExpandStaffing] = useState(false)
 
   // Edit cell state
   const [editCell,  setEditCell]  = useState<{ agentId: string; date: string; agentName: string } | null>(null)
@@ -258,17 +259,24 @@ export default function Dashboard() {
     const sch    = parsed.find(s => s.range.from <= staffingDate && s.range.to >= staffingDate)
     if (!sch) return []
 
-    const out: { slot: string; staffed: number; required: number }[] = []
+    const out: { slot: string; staffed: number; required: number; gap: number; deficit: number; surplus: number }[] = []
     for (let min = 0; min < 24 * 60; min += 30) {
-      // Count agents from roster working this slot on this day
-      const staffed = sch.roster.filter(rr => {
-        const sh = parseShift(rr[day] ?? '')
-        return sh && sh.start <= min && min < sh.end
-      }).length
+      // Count all scheduled agents working this slot (template A1/A2 or real agents)
+      const staffed = sch.slotAgents.filter(a =>
+        !a.off.includes(day) && a.start <= min && min < a.end
+      ).length
       const req = sch.required.find(r => r.weekday === day && r.slotMin === min)
       const required = req?.required ?? 0
       if (staffed > 0 || required > 0) {
-        out.push({ slot: minToStr(min), staffed, required })
+        const gap = staffed - required
+        out.push({
+          slot: minToStr(min),
+          staffed,
+          required,
+          gap,
+          deficit: Math.max(0, required - staffed),   // overtime/shortfall needed
+          surplus: Math.max(0, staffed - required),    // excess agents
+        })
       }
     }
     return out
@@ -531,9 +539,18 @@ export default function Dashboard() {
 
             {/* Interval staffing */}
             <div className="bg-white border border-gray-200 rounded-2xl p-5">
-              <div className="mb-4">
-                <h3 className="text-sm font-semibold text-gray-900">Interval Staffing</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Staffed vs. Required agents (30-min intervals)</p>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Interval Staffing</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Staffed vs. Required agents (30-min intervals)</p>
+                </div>
+                <button
+                  onClick={() => setExpandStaffing(true)}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"
+                  title="Enlarge chart"
+                >
+                  <Maximize2 className="w-4 h-4" />
+                </button>
               </div>
               <div className="mb-4">
                 <label className="label">Select Date</label>
@@ -547,21 +564,47 @@ export default function Dashboard() {
                 />
               </div>
               {staffingChartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={200}>
-                  <ComposedChart data={staffingChartData} margin={{ top: 5, right: 0, left: -30, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="slot" tick={{ fontSize: 9, fill: '#6b7280' }} interval={3} />
-                    <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} />
-                    <Tooltip
-                      contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10 }}
-                      labelStyle={{ color: '#374151', fontSize: 12 }}
-                      itemStyle={{ fontSize: 12 }}
-                    />
-                    <Legend iconSize={10} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                    <Bar dataKey="staffed" name="Staffed" fill="#6370fa" radius={[3,3,0,0]} fillOpacity={0.85} />
-                    <Line type="monotone" dataKey="required" name="Required" stroke="#f59e0b" strokeWidth={2} dot={false} strokeDasharray="4 2" />
-                  </ComposedChart>
-                </ResponsiveContainer>
+                <>
+                  {/* Mini legend */}
+                  <div className="flex items-center gap-4 mb-2 text-[11px] text-gray-500">
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm bg-brand-500 inline-block" /> On Target</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm bg-amber-400 inline-block" /> Surplus (+3)</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm bg-red-400 inline-block" /> Shortfall</span>
+                  </div>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <ComposedChart data={staffingChartData} margin={{ top: 5, right: 0, left: -30, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="slot" tick={{ fontSize: 9, fill: '#6b7280' }} interval={3} />
+                      <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} />
+                      <Tooltip
+                        contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10 }}
+                        labelStyle={{ color: '#374151', fontSize: 12 }}
+                        itemStyle={{ fontSize: 12 }}
+                        formatter={(val: number, name: string, props: { payload?: { gap: number; deficit: number; surplus: number } }) => {
+                          if (name === 'Staffed') {
+                            const { gap = 0 } = props.payload ?? {}
+                            const gapStr = gap >= 0 ? `+${gap}` : `${gap}`
+                            return [`${val} agents (${gapStr} vs required)`, name]
+                          }
+                          return [`${val}`, name]
+                        }}
+                      />
+                      <Bar dataKey="staffed" name="Staffed" radius={[3,3,0,0]} fillOpacity={0.88}>
+                        {staffingChartData.map((entry, idx) => (
+                          <Cell
+                            key={idx}
+                            fill={
+                              entry.deficit > 0 ? '#f87171' :   // shortfall → red
+                              entry.surplus > 3 ? '#fbbf24' :   // big surplus → amber
+                              '#6370fa'                          // on target → brand blue
+                            }
+                          />
+                        ))}
+                      </Bar>
+                      <Line type="monotone" dataKey="required" name="Required" stroke="#f59e0b" strokeWidth={2} dot={false} strokeDasharray="4 2" />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </>
               ) : (
                 <div className="flex items-center justify-center h-[200px] text-gray-400 text-sm">
                   No staffing data for {staffingDate}
@@ -827,6 +870,177 @@ export default function Dashboard() {
                              text-white transition-all disabled:opacity-50">
                   {saving ? 'Saving…' : 'Save'}
                 </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ══════════════════════════════════════════════════════════════
+           INTERVAL STAFFING EXPANDED MODAL
+         ══════════════════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {expandStaffing && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setExpandStaffing(false)}
+              className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 16 }}
+              transition={{ duration: 0.22 }}
+              className="fixed inset-4 z-50 bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+            >
+              {/* Modal header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
+                <div>
+                  <h2 className="font-bold text-gray-900">Interval Staffing — {staffingDate}</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Staffed vs. Required agents per 30-min interval ·
+                    {' '}<span className="text-red-500 font-medium">Red = shortfall (overtime needed)</span>
+                    {' '}· <span className="text-amber-500 font-medium">Amber = surplus &gt;3</span>
+                    {' '}· <span className="text-brand-600 font-medium">Blue = on target</span>
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div>
+                    <label className="label text-xs">Date</label>
+                    <input
+                      type="date"
+                      className="input text-sm py-1"
+                      value={staffingDate}
+                      min={dateFrom}
+                      max={dateTo}
+                      onChange={e => setStaffingDate(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    onClick={() => setExpandStaffing(false)}
+                    className="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"
+                  >
+                    <Minimize2 className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Expanded chart */}
+              <div className="flex-1 p-6 overflow-auto">
+                {staffingChartData.length > 0 ? (
+                  <>
+                    {/* Summary stats */}
+                    <div className="grid grid-cols-4 gap-4 mb-6">
+                      {(() => {
+                        const shortfallSlots = staffingChartData.filter(d => d.deficit > 0)
+                        const surplusSlots   = staffingChartData.filter(d => d.surplus > 3)
+                        const onTargetSlots  = staffingChartData.filter(d => d.deficit === 0 && d.surplus <= 3)
+                        const totalDeficit   = staffingChartData.reduce((s, d) => s + d.deficit, 0)
+                        return (
+                          <>
+                            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                              <p className="text-2xl font-bold text-red-600">{shortfallSlots.length}</p>
+                              <p className="text-xs text-red-500 mt-1">Intervals short-staffed</p>
+                              <p className="text-[10px] text-red-400 mt-0.5">{totalDeficit} total agent-slots needed</p>
+                            </div>
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                              <p className="text-2xl font-bold text-amber-600">{surplusSlots.length}</p>
+                              <p className="text-xs text-amber-500 mt-1">Intervals with surplus &gt;3</p>
+                            </div>
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                              <p className="text-2xl font-bold text-emerald-600">{onTargetSlots.length}</p>
+                              <p className="text-xs text-emerald-500 mt-1">Intervals on target</p>
+                            </div>
+                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                              <p className="text-2xl font-bold text-gray-700">{staffingChartData.length}</p>
+                              <p className="text-xs text-gray-500 mt-1">Total active intervals</p>
+                            </div>
+                          </>
+                        )
+                      })()}
+                    </div>
+
+                    {/* Large chart */}
+                    <ResponsiveContainer width="100%" height={380}>
+                      <ComposedChart data={staffingChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="slot" tick={{ fontSize: 10, fill: '#6b7280' }} interval={1} angle={-45} textAnchor="end" height={45} />
+                        <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} />
+                        <Tooltip
+                          contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10 }}
+                          labelStyle={{ color: '#374151', fontSize: 12, fontWeight: 600 }}
+                          itemStyle={{ fontSize: 12 }}
+                          formatter={(val: number, name: string, props: { payload?: { gap: number; deficit: number; surplus: number } }) => {
+                            if (name === 'Staffed') {
+                              const { gap = 0, deficit = 0, surplus = 0 } = props.payload ?? {}
+                              const gapStr = gap >= 0 ? `+${gap}` : `${gap}`
+                              const status = deficit > 0 ? `⚠️ ${deficit} agents short (overtime needed)` :
+                                             surplus > 3 ? `📊 ${surplus} surplus agents` : '✅ On target'
+                              return [`${val} agents (${gapStr}) — ${status}`, name]
+                            }
+                            return [`${val}`, name]
+                          }}
+                        />
+                        <Legend iconSize={10} wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
+                        <Bar dataKey="staffed" name="Staffed" radius={[3,3,0,0]} fillOpacity={0.88} maxBarSize={18}>
+                          {staffingChartData.map((entry, idx) => (
+                            <Cell
+                              key={idx}
+                              fill={
+                                entry.deficit > 0 ? '#f87171' :
+                                entry.surplus > 3 ? '#fbbf24' :
+                                '#6370fa'
+                              }
+                            />
+                          ))}
+                        </Bar>
+                        <Line type="monotone" dataKey="required" name="Required" stroke="#f59e0b" strokeWidth={2.5} dot={false} strokeDasharray="5 3" />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+
+                    {/* Gap table */}
+                    <div className="mt-6 border border-gray-200 rounded-xl overflow-hidden">
+                      <div className="bg-gray-50 px-4 py-2.5 border-b border-gray-200">
+                        <p className="text-xs font-semibold text-gray-700">Interval-by-interval gap detail</p>
+                      </div>
+                      <div className="overflow-x-auto max-h-64">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50 sticky top-0">
+                            <tr>
+                              <th className="text-left px-3 py-2 text-gray-500 font-medium">Time</th>
+                              <th className="text-center px-3 py-2 text-gray-500 font-medium">Required</th>
+                              <th className="text-center px-3 py-2 text-gray-500 font-medium">Staffed</th>
+                              <th className="text-center px-3 py-2 text-gray-500 font-medium">Gap</th>
+                              <th className="text-left px-3 py-2 text-gray-500 font-medium">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {staffingChartData.map((d, i) => (
+                              <tr key={i} className={`border-t border-gray-100 ${d.deficit > 0 ? 'bg-red-50/60' : d.surplus > 3 ? 'bg-amber-50/40' : ''}`}>
+                                <td className="px-3 py-1.5 font-mono text-gray-700">{d.slot}</td>
+                                <td className="px-3 py-1.5 text-center text-gray-600">{d.required}</td>
+                                <td className="px-3 py-1.5 text-center font-semibold text-gray-900">{d.staffed}</td>
+                                <td className={`px-3 py-1.5 text-center font-bold ${d.gap < 0 ? 'text-red-600' : d.gap > 3 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                  {d.gap >= 0 ? `+${d.gap}` : d.gap}
+                                </td>
+                                <td className="px-3 py-1.5">
+                                  {d.deficit > 0 ? <span className="text-red-500">⚠️ {d.deficit} OT needed</span> :
+                                   d.surplus > 3 ? <span className="text-amber-500">📊 +{d.surplus} surplus</span> :
+                                   <span className="text-emerald-500">✅ OK</span>}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+                    No staffing data for {staffingDate}
+                  </div>
+                )}
               </div>
             </motion.div>
           </>

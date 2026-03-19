@@ -2,6 +2,7 @@ import { Router, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../config/database'
 import { requireAuth, AuthRequest } from '../middleware/auth'
+import { logChange } from '../utils/logChange'
 
 const router = Router()
 router.use(requireAuth)
@@ -102,6 +103,15 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       organizationId: orgId,
     },
   })
+  await logChange({
+    organizationId:  orgId,
+    performedById:   req.user!.id,
+    performedByName: req.user!.name,
+    agentId:         agent.id,
+    entityType:      'agent',
+    action:          'created',
+    description:     `Agent "${agent.name}" (${agentCode}) was created`,
+  })
   res.status(201).json(agent)
 })
 
@@ -132,6 +142,15 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
         ...(hireDate ? { hireDate: new Date(hireDate) } : {}),
       },
     })
+    await logChange({
+      organizationId:  orgId,
+      performedById:   req.user!.id,
+      performedByName: req.user!.name,
+      agentId:         agent.id,
+      entityType:      'agent',
+      action:          'updated',
+      description:     `Agent "${agent.name}" was updated`,
+    })
     return res.json(agent)
   }
 
@@ -142,12 +161,34 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       ...(hireDate ? { hireDate: new Date(hireDate) } : {}),
     },
   })
+  await logChange({
+    organizationId:  orgId,
+    performedById:   req.user!.id,
+    performedByName: req.user!.name,
+    agentId:         agent.id,
+    entityType:      'agent',
+    action:          'updated',
+    description:     `Agent "${agent.name}" was updated`,
+  })
   res.json(agent)
 })
 
 // DELETE /api/agents/:id
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
+  const orgId  = req.user!.organizationId ?? 'default'
+  const agent  = await prisma.agent.findUnique({ where: { id: req.params.id } })
   await prisma.agent.delete({ where: { id: req.params.id } })
+  if (agent) {
+    await logChange({
+      organizationId:  orgId,
+      performedById:   req.user!.id,
+      performedByName: req.user!.name,
+      agentId:         agent.id,
+      entityType:      'agent',
+      action:          'deleted',
+      description:     `Agent "${agent.name}" was deleted`,
+    })
+  }
   res.json({ success: true })
 })
 

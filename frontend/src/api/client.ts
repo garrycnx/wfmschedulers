@@ -85,6 +85,21 @@ export const leaveApi = {
   allocateBalance: (data: unknown) => apiClient.post('/leave-balances', data),
 }
 
+export const changeLogApi = {
+  list: (params?: { agentId?: string; limit?: number }) => {
+    const q = new URLSearchParams()
+    if (params?.agentId) q.set('agentId', params.agentId)
+    if (params?.limit)   q.set('limit', String(params.limit))
+    return apiClient.get(`/changelog${q.toString() ? `?${q}` : ''}`).then(r => r.data)
+  },
+}
+
+export const userMgmtApi = {
+  list:   ()                   => apiClient.get('/users').then(r => r.data),
+  create: (data: unknown)      => apiClient.post('/users', data).then(r => r.data),
+  remove: (id: string)         => apiClient.delete(`/users/${id}`).then(r => r.data),
+}
+
 export const channelApi = {
   list: (params?: { agentId?: string; date?: string }) => {
     const q = new URLSearchParams()

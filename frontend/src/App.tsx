@@ -12,6 +12,8 @@ import ScheduleDetail from './pages/ScheduleDetail'
 import AgentPortal from './pages/AgentPortal'
 import Settings from './pages/Settings'
 import LeaveManagement from './pages/LeaveManagement'
+import UserManagement from './pages/UserManagement'
+import ChangeLog from './pages/ChangeLog'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -26,6 +28,14 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function ManagerRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((s) => s.user)
+  if (!user) return <Navigate to="/login" replace />
+  if (user.role === 'viewer') return <Navigate to="/dashboard" replace />
+  if (user.role === 'agent')  return <Navigate to="/agent-portal" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   const user = useAuthStore((s) => s.user)
 
@@ -35,7 +45,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/agent-portal" element={<AgentPortal />} />
 
-      {/* Manager / Admin shell */}
+      {/* Manager / Admin / Viewer shell */}
       <Route
         path="/"
         element={
@@ -48,13 +58,15 @@ export default function App() {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
-        <Route path="generate" element={<ScheduleGenerator />} />
-        <Route path="agents" element={<AgentManagement />} />
-        <Route path="lobs" element={<LobManagement />} />
+        <Route path="generate"  element={<ManagerRoute><ScheduleGenerator /></ManagerRoute>} />
+        <Route path="agents"    element={<AgentManagement />} />
+        <Route path="lobs"      element={<ManagerRoute><LobManagement /></ManagerRoute>} />
         <Route path="schedules" element={<ScheduleHistory />} />
         <Route path="schedules/:id" element={<ScheduleDetail />} />
-        <Route path="leave" element={<LeaveManagement />} />
-        <Route path="settings" element={<Settings />} />
+        <Route path="leave"     element={<LeaveManagement />} />
+        <Route path="users"     element={<ManagerRoute><UserManagement /></ManagerRoute>} />
+        <Route path="changelog" element={<ChangeLog />} />
+        <Route path="settings"  element={<ManagerRoute><Settings /></ManagerRoute>} />
       </Route>
 
       {/* Catch-all */}

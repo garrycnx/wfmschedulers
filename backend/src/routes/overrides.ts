@@ -2,6 +2,7 @@ import { Router, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../config/database'
 import { requireAuth, AuthRequest } from '../middleware/auth'
+import { logChange } from '../utils/logChange'
 
 const router = Router()
 router.use(requireAuth)
@@ -68,6 +69,20 @@ router.post('/:id/overrides', async (req: AuthRequest, res: Response) => {
       note:         data.note ?? null,
       organizationId: orgId,
     },
+  })
+  // Look up agent name for description
+  const agent = await prisma.agent.findUnique({ where: { id: req.params.id }, select: { name: true } })
+  const overrideDesc = data.isOff
+    ? `Agent "${agent?.name ?? req.params.id}" marked off on ${data.date}`
+    : `Shift override applied for agent "${agent?.name ?? req.params.id}" on ${data.date} (${data.shiftStart}–${data.shiftEnd})`
+  await logChange({
+    organizationId:  orgId,
+    performedById:   req.user!.id,
+    performedByName: req.user!.name,
+    agentId:         req.params.id,
+    entityType:      'override',
+    action:          'updated',
+    description:     overrideDesc,
   })
   res.status(201).json(override)
 })

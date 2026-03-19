@@ -5,6 +5,7 @@ import {
   LayoutDashboard, CalendarDays, Users, History,
   Settings, LogOut, ChevronLeft, ChevronRight,
   Sparkles, ExternalLink, Briefcase, CalendarOff,
+  Users2,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 
@@ -14,12 +15,14 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard',          roles: ['admin', 'manager'] },
+  { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard',          roles: ['admin', 'manager', 'viewer'] },
   { to: '/generate',   icon: Sparkles,        label: 'Generate Schedule',  roles: ['admin', 'manager'] },
-  { to: '/agents',     icon: Users,           label: 'Agents',             roles: ['admin', 'manager'] },
+  { to: '/agents',     icon: Users,           label: 'Agents',             roles: ['admin', 'manager', 'viewer'] },
   { to: '/lobs',       icon: Briefcase,       label: 'Lines of Business',  roles: ['admin', 'manager'] },
-  { to: '/schedules',  icon: History,         label: 'Schedule History',   roles: ['admin', 'manager'] },
-  { to: '/leave',      icon: CalendarOff,     label: 'Leave Management',   roles: ['admin', 'manager'] },
+  { to: '/schedules',  icon: History,         label: 'Schedule History',   roles: ['admin', 'manager', 'viewer'] },
+  { to: '/leave',      icon: CalendarOff,     label: 'Leave Management',   roles: ['admin', 'manager', 'viewer'] },
+  { to: '/users',      icon: Users2,          label: 'User Management',    roles: ['admin', 'manager'] },
+  { to: '/changelog',  icon: History,         label: 'Change Log',         roles: ['admin', 'manager', 'viewer'] },
   { to: '/settings',   icon: Settings,        label: 'Settings',           roles: ['admin', 'manager'] },
 ]
 

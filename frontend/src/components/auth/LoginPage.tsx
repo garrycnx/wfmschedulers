@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGoogleLogin } from '@react-oauth/google'
 import { motion } from 'framer-motion'
@@ -13,6 +13,12 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
 export default function LoginPage() {
   const navigate = useNavigate()
   const { isAuthenticated, setAuth } = useAuthStore()
+
+  const [tab, setTab]               = useState<'google' | 'credentials'>('google')
+  const [credUsername, setCredUsername] = useState('')
+  const [credPassword, setCredPassword] = useState('')
+  const [credError, setCredError]   = useState('')
+  const [credLoading, setCredLoading] = useState(false)
 
   useEffect(() => {
     if (isAuthenticated) navigate('/dashboard', { replace: true })
@@ -55,6 +61,25 @@ export default function LoginPage() {
     scope: 'openid email profile',
   })
 
+  async function handleCredentialLogin(e: React.FormEvent) {
+    e.preventDefault()
+    setCredError('')
+    setCredLoading(true)
+    try {
+      const res = await apiClient.post<{ user: User; token: string }>(
+        '/auth/user-login',
+        { username: credUsername, password: credPassword },
+      )
+      setAuth(res.data.user, res.data.token)
+      toast.success(`Welcome, ${res.data.user.name.split(' ')[0]}!`)
+      navigate('/dashboard', { replace: true })
+    } catch {
+      setCredError('Invalid username or password.')
+    } finally {
+      setCredLoading(false)
+    }
+  }
+
   return (
     <div className="login-bg min-h-screen flex items-center justify-center p-4">
       {/* Background grid */}
@@ -92,27 +117,98 @@ export default function LoginPage() {
         {/* Card */}
         <div className="card-glass p-8">
           <h2 className="text-xl font-semibold text-white mb-1">Sign in to your workspace</h2>
-          <p className="text-slate-400 text-sm mb-8">
-            Use your Google account to access your organisation's scheduling platform.
+          <p className="text-slate-400 text-sm mb-6">
+            Access your organisation's scheduling platform.
           </p>
 
-          {/* Google button — active only when client ID is baked in at build time */}
-          {GOOGLE_CLIENT_ID ? (
+          {/* Tabs */}
+          <div className="flex rounded-xl bg-white/5 border border-white/10 p-1 mb-6 gap-1">
             <button
-              onClick={() => login()}
-              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-800
-                         font-semibold rounded-xl px-5 py-3.5 text-sm transition-all duration-200
-                         shadow-md hover:shadow-lg active:scale-[0.98]"
+              onClick={() => setTab('google')}
+              className={`flex-1 text-sm font-medium rounded-lg py-2 transition-all ${
+                tab === 'google'
+                  ? 'bg-white/10 text-white shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
             >
-              <GoogleIcon />
-              Continue with Google
+              Google
             </button>
-          ) : (
-            <div className="w-full flex items-center justify-center gap-3 bg-white/10 text-slate-400
-                            rounded-xl px-5 py-3.5 text-sm border border-white/10 cursor-not-allowed">
-              <GoogleIcon />
-              Google sign-in not configured
-            </div>
+            <button
+              onClick={() => setTab('credentials')}
+              className={`flex-1 text-sm font-medium rounded-lg py-2 transition-all ${
+                tab === 'credentials'
+                  ? 'bg-white/10 text-white shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Login with credentials
+            </button>
+          </div>
+
+          {tab === 'google' && (
+            <>
+              {/* Google button — active only when client ID is baked in at build time */}
+              {GOOGLE_CLIENT_ID ? (
+                <button
+                  onClick={() => login()}
+                  className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-800
+                             font-semibold rounded-xl px-5 py-3.5 text-sm transition-all duration-200
+                             shadow-md hover:shadow-lg active:scale-[0.98]"
+                >
+                  <GoogleIcon />
+                  Continue with Google
+                </button>
+              ) : (
+                <div className="w-full flex items-center justify-center gap-3 bg-white/10 text-slate-400
+                                rounded-xl px-5 py-3.5 text-sm border border-white/10 cursor-not-allowed">
+                  <GoogleIcon />
+                  Google sign-in not configured
+                </div>
+              )}
+            </>
+          )}
+
+          {tab === 'credentials' && (
+            <form onSubmit={handleCredentialLogin} className="space-y-4">
+              {credError && (
+                <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">
+                  {credError}
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1.5">Username</label>
+                <input
+                  className="w-full bg-white/5 border border-white/10 text-white placeholder-slate-500
+                             rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                  placeholder="your-username"
+                  value={credUsername}
+                  onChange={e => setCredUsername(e.target.value)}
+                  required
+                  autoComplete="username"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1.5">Password</label>
+                <input
+                  type="password"
+                  className="w-full bg-white/5 border border-white/10 text-white placeholder-slate-500
+                             rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                  placeholder="••••••••"
+                  value={credPassword}
+                  onChange={e => setCredPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={credLoading}
+                className="w-full bg-brand-600 hover:bg-brand-500 text-white font-semibold
+                           rounded-xl px-5 py-3.5 text-sm transition-all disabled:opacity-50"
+              >
+                {credLoading ? 'Signing in…' : 'Sign In'}
+              </button>
+            </form>
           )}
 
           <div className="mt-6 flex items-center gap-3">

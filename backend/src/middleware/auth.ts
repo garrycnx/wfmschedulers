@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken'
 import { prisma } from '../config/database'
 
 export interface AuthRequest extends Request {
-  user?: { id: string; email: string; role: string; organizationId?: string }
+  user?: { id: string; email: string; name: string; role: string; organizationId?: string }
 }
 
 export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
@@ -15,12 +15,13 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
   const token = authHeader.slice(7)
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET!) as {
-      sub: string; email: string; role: string; organizationId?: string
+      sub: string; email: string; name?: string; role: string; organizationId?: string
     }
     req.user = {
-      id: payload.sub,
-      email: payload.email,
-      role: payload.role,
+      id:             payload.sub,
+      email:          payload.email,
+      name:           payload.name ?? payload.email,
+      role:           payload.role,
       organizationId: payload.organizationId,
     }
     next()

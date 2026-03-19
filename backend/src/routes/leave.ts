@@ -2,6 +2,7 @@ import { Router, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../config/database'
 import { requireAuth, AuthRequest } from '../middleware/auth'
+import { logChange } from '../utils/logChange'
 
 const router = Router()
 router.use(requireAuth)
@@ -185,6 +186,15 @@ router.patch('/leave-requests/:id/approve', async (req: AuthRequest, res: Respon
     },
     include: { agent: { select: { id: true, name: true, agentCode: true, email: true } } },
   })
+  await logChange({
+    organizationId:  existing.organizationId,
+    performedById:   req.user!.id,
+    performedByName: req.user!.name,
+    agentId:         existing.agentId,
+    entityType:      'leave',
+    action:          'approved',
+    description:     `Leave request for "${updated.agent.name}" (${existing.leaveType}) was approved`,
+  })
   res.json(updated)
 })
 
@@ -202,6 +212,15 @@ router.patch('/leave-requests/:id/reject', async (req: AuthRequest, res: Respons
       reviewedAt: new Date(),
     },
     include: { agent: { select: { id: true, name: true, agentCode: true, email: true } } },
+  })
+  await logChange({
+    organizationId:  existing.organizationId,
+    performedById:   req.user!.id,
+    performedByName: req.user!.name,
+    agentId:         existing.agentId,
+    entityType:      'leave',
+    action:          'rejected',
+    description:     `Leave request for "${updated.agent.name}" (${existing.leaveType}) was rejected`,
   })
   res.json(updated)
 })

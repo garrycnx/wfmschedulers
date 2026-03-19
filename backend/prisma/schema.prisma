@@ -24,6 +24,7 @@ model Organization {
   leaveBalances      LeaveBalance[]
   leaveTypeConfigs   LeaveTypeConfig[]
   channelAssignments ChannelAssignment[]
+  changeLogs         ChangeLog[]
 }
 
 // Line of Business – e.g. "Customer Service", "Tech Support"
@@ -49,7 +50,9 @@ model User {
   name           String
   picture        String?
   googleId       String?       @unique
-  role           String        @default("manager")  // admin | manager | agent
+  username       String?       @unique
+  passwordHash   String?
+  role           String        @default("manager")  // admin | manager | agent | viewer
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id])
   createdAt      DateTime      @default(now())
@@ -224,4 +227,17 @@ model ChannelAssignment {
   createdAt      DateTime @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id])
   agent          Agent    @relation(fields: [agentId], references: [id])
+}
+
+model ChangeLog {
+  id               String   @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  performedById    String?
+  performedByName  String
+  agentId          String?
+  entityType       String   // "agent" | "schedule" | "leave" | "override" | "user"
+  action           String   // "created" | "updated" | "deleted" | "approved" | "rejected" | "published"
+  description      String
+  createdAt        DateTime @default(now())
 }

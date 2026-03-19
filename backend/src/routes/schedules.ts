@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../config/database'
 import { requireAuth, AuthRequest } from '../middleware/auth'
+import { logChange } from '../utils/logChange'
 
 const router = Router()
 router.use(requireAuth)
@@ -78,6 +79,14 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       createdBy: req.user!.id,
     },
   })
+  await logChange({
+    organizationId:  orgId,
+    performedById:   req.user!.id,
+    performedByName: req.user!.name,
+    entityType:      'schedule',
+    action:          'created',
+    description:     `Schedule "${schedule.name}" was created`,
+  })
   res.status(201).json(schedule)
 })
 
@@ -99,9 +108,18 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
 
 // POST /api/schedules/:id/publish
 router.post('/:id/publish', async (req: AuthRequest, res: Response) => {
+  const orgId = req.user!.organizationId ?? 'default'
   const schedule = await prisma.schedule.update({
     where: { id: req.params.id },
     data: { status: 'published' },
+  })
+  await logChange({
+    organizationId:  orgId,
+    performedById:   req.user!.id,
+    performedByName: req.user!.name,
+    entityType:      'schedule',
+    action:          'published',
+    description:     `Schedule "${schedule.name}" was published`,
   })
   res.json(schedule)
 })

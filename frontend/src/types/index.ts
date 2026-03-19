@@ -4,7 +4,7 @@ export interface User {
   email: string
   name: string
   picture?: string
-  role: 'admin' | 'manager' | 'agent'
+  role: 'admin' | 'manager' | 'agent' | 'viewer'
   organizationId?: string
   createdAt: string
 }

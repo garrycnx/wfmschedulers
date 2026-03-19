@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Plus, Edit2, Trash2, Send, CalendarDays, FileSpreadsheet } from 'lucide-react'
+import { Search, Plus, Edit2, Trash2, Send, CalendarDays, FileSpreadsheet, History } from 'lucide-react'
 import toast from 'react-hot-toast'
 import type { Agent, AgentFormData, AgentStatus, SkillLevel } from '../types'
 import AgentModal from '../components/agents/AgentModal'
@@ -9,6 +10,7 @@ import AgentUploadModal from '../components/agents/AgentUploadModal'
 import { useAgentStore } from '../store/agentStore'
 import { useLobStore } from '../store/lobStore'
 import { useScheduleStore } from '../store/scheduleStore'
+import { useAuthStore } from '../store/authStore'
 import { minToTime } from '../utils/scheduleEngine'
 
 const statusStyle: Record<AgentStatus, string> = {
@@ -28,6 +30,9 @@ export default function AgentManagement() {
   const { agents, loading, addAgent, updateAgent, deleteAgent, fetchAgents } = useAgentStore()
   const { lobs, fetchLobs } = useLobStore()
   const { agents: slots, agentAssignments, assignAgent, unassignAgent } = useScheduleStore()
+  const navigate = useNavigate()
+  const user = useAuthStore(s => s.user)
+  const isViewer = user?.role === 'viewer'
 
   useEffect(() => { fetchLobs() }, [])
 
@@ -135,22 +140,26 @@ export default function AgentManagement() {
           </select>
         </div>
 
-        <button
-          onClick={() => setUploadOpen(true)}
-          className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 font-semibold
-                     border border-gray-200 rounded-xl px-4 py-2.5 text-sm transition-all shrink-0"
-        >
-          <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-          Import Excel
-        </button>
-        <button
-          onClick={() => { setEditingAgentId(null); setModalOpen(true) }}
-          className="flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white font-semibold
-                     rounded-xl px-4 py-2.5 text-sm transition-all shadow-glow-sm shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          Add Agent
-        </button>
+        {!isViewer && (
+          <button
+            onClick={() => setUploadOpen(true)}
+            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 font-semibold
+                       border border-gray-200 rounded-xl px-4 py-2.5 text-sm transition-all shrink-0"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            Import Excel
+          </button>
+        )}
+        {!isViewer && (
+          <button
+            onClick={() => { setEditingAgentId(null); setModalOpen(true) }}
+            className="flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white font-semibold
+                       rounded-xl px-4 py-2.5 text-sm transition-all shadow-glow-sm shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            Add Agent
+          </button>
+        )}
       </div>
 
       {/* Agents table */}
@@ -255,13 +264,15 @@ export default function AgentManagement() {
                     </td>
                     <td className="text-right relative">
                       <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => { setEditingAgentId(agent.id); setModalOpen(true) }}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"
-                          title="Edit agent"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
+                        {!isViewer && (
+                          <button
+                            onClick={() => { setEditingAgentId(agent.id); setModalOpen(true) }}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"
+                            title="Edit agent"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => setCalendarAgent(agent)}
                           className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-brand-50 transition-all"
@@ -270,19 +281,30 @@ export default function AgentManagement() {
                           <CalendarDays className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => handleInvite(agent.email)}
+                          onClick={() => navigate(`/changelog?agentId=${agent.id}`)}
                           className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-brand-50 transition-all"
-                          title="Send portal invite"
+                          title="View change history"
                         >
-                          <Send className="w-3.5 h-3.5" />
+                          <History className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => handleDelete(agent.id)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"
-                          title="Remove"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {!isViewer && (
+                          <button
+                            onClick={() => handleInvite(agent.email)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-brand-50 transition-all"
+                            title="Send portal invite"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {!isViewer && (
+                          <button
+                            onClick={() => handleDelete(agent.id)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                            title="Remove"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </motion.tr>

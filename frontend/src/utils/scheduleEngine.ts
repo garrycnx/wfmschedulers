@@ -260,13 +260,17 @@ export function generateRoster(
         const { sla, abn } = daySlaMetrics(testCounts, wd)
         if (sla < slaFrac || abn > abandonFrac) { ok = false; break }
 
-        // 2. Peak interval protection: must maintain required count at peak slots
+        // 2. Interval gap constraint: staffed must be within [-2, +3] of required.
+        //    Allows minor deficits at off-peak slots while day-level SLA stays met.
         for (const t of allSlots) {
           const lbl = minToTime(t)
           const vol = volLookup[wd]?.[lbl] ?? 0
-          if (vol < peakThreshold[wd]) continue              // off-peak → no hard floor
+          if (vol === 0) continue
           const reqV = baselineReq[wd]?.[lbl] ?? 0
-          if (reqV > 0 && (testCounts[wd]?.[lbl] ?? 0) < reqV) { ok = false; break }
+          if (reqV === 0) continue
+          const actual = testCounts[wd]?.[lbl] ?? 0
+          // Enforce minimum gap of -2 (can be at most 2 below required)
+          if (actual < reqV - 2) { ok = false; break }
         }
       }
 
