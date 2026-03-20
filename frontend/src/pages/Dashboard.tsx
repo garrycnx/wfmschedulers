@@ -445,6 +445,21 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* LOB schedule date-range info */}
+      {lobId && !loading && schedules.length > 0 && (
+        <div className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-2.5 flex flex-wrap items-center gap-x-6 gap-y-1">
+          <span className="text-xs font-semibold text-brand-700 uppercase tracking-wide">
+            {lobs.find(l => l.id === lobId)?.name} — existing schedules in range
+          </span>
+          {parsed.map(s => (
+            <span key={s.id} className="text-xs text-brand-600">
+              <span className="font-medium">{s.name}</span>
+              {' '}{s.range.from} → {s.range.to}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Loading */}
       {loading && (
         <div className="text-center text-gray-400 py-12 text-sm">Loading schedules…</div>

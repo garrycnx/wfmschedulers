@@ -291,7 +291,7 @@ router.get('/leave-types', async (req: AuthRequest, res: Response) => {
 router.post('/leave-types', async (req: AuthRequest, res: Response) => {
   const Schema = z.object({
     name:        z.string().min(1).max(50),
-    description: z.string().optional(),
+    description: z.string().optional().nullable(),
     color:       z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#6366f1'),
     isPaid:      z.boolean().default(true),
     isActive:    z.boolean().default(true),

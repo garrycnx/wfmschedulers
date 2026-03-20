@@ -2,10 +2,10 @@ import { useRef, useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import Papa from 'papaparse'
-import { Check, ChevronRight, Loader2, Send, Unlock, Lock } from 'lucide-react'
+import { Check, ChevronRight, Loader2, Send, Unlock, Lock, AlertTriangle } from 'lucide-react'
 import { useScheduleStore } from '../store/scheduleStore'
 import { useLobStore } from '../store/lobStore'
-import { schedulesApi } from '../api/client'
+import { schedulesApi, apiClient } from '../api/client'
 import SettingsPanel from '../components/scheduling/SettingsPanel'
 import ForecastUpload from '../components/scheduling/ForecastUpload'
 import StaffingChart from '../components/scheduling/StaffingChart'
@@ -53,7 +53,25 @@ export default function ScheduleGenerator() {
     const d = new Date(); d.setDate(d.getDate() + 6); return d.toISOString().split('T')[0]
   })
 
+  const [existingForLob, setExistingForLob] = useState<{id:string; name:string; from:string; to:string}[]>([])
+  const [overwriteConfirm, setOverwriteConfirm] = useState(false)
+
   useEffect(() => { fetchLobs() }, [])
+
+  // Check for existing schedules whenever LOB or date range changes
+  useEffect(() => {
+    if (!selectedLobId) { setExistingForLob([]); return }
+    apiClient.get<Array<{id:string; name:string; fromDate:string|null; toDate:string|null; weekStartDate:string}>>(
+      `/schedules?lobId=${selectedLobId}&from=${scheduleFrom}&to=${scheduleTo}`
+    ).then(r => {
+      setExistingForLob(r.data.map(s => ({
+        id: s.id,
+        name: s.name,
+        from: (s.fromDate ?? s.weekStartDate).split('T')[0],
+        to:   (s.toDate  ?? s.weekStartDate).split('T')[0],
+      })))
+    }).catch(() => {})
+  }, [selectedLobId, scheduleFrom, scheduleTo])
 
   // ── Step 1: Parse uploaded CSV ────────────────────────────────────────────
   function handleForecastParsed(rows: ForecastRow[]) {
@@ -78,6 +96,12 @@ export default function ScheduleGenerator() {
   // ── Step 3→4: Generate full roster ───────────────────────────────────────
   async function handleGenerateRoster() {
     if (!store.requiredStaff.length) { toast.error('Compute required staff first.'); return }
+    if (existingForLob.length > 0) { setOverwriteConfirm(true); return }
+    await runGenerate()
+  }
+
+  async function runGenerate() {
+    setOverwriteConfirm(false)
     setIsGenerating(true)
     store.setStep('generating_roster')
 
@@ -193,6 +217,18 @@ export default function ScheduleGenerator() {
               <p className="text-[10px] text-brand-600 mt-1 font-medium">
                 {lobs.find(l => l.id === selectedLobId)?._count?.agents ?? '?'} agents in this LOB
               </p>
+            )}
+            {existingForLob.length > 0 && (
+              <div className="mt-2 flex items-start gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                <div className="text-[10px] text-amber-700 leading-relaxed">
+                  <span className="font-semibold block">Schedule already exists for this period:</span>
+                  {existingForLob.map(s => (
+                    <span key={s.id} className="block">{s.name}: {fmtDate(s.from)} → {fmtDate(s.to)}</span>
+                  ))}
+                  <span className="block mt-0.5">Generating will overwrite it.</span>
+                </div>
+              </div>
             )}
           </div>
           {/* From date */}
@@ -493,6 +529,51 @@ export default function ScheduleGenerator() {
           forecastRows={store.forecastRows}
           requiredStaff={store.requiredStaff}
         />
+      )}
+
+      {/* ── Overwrite Confirm Modal ─────────────────────────────────────────── */}
+      {overwriteConfirm && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+            onClick={() => setOverwriteConfirm(false)} />
+          <div className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+                          bg-white rounded-2xl shadow-2xl border border-gray-200 p-6 w-96">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-4.5 h-4.5 text-amber-600" />
+              </div>
+              <h3 className="font-bold text-gray-900">Overwrite existing schedule?</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-3">
+              A schedule already exists for <span className="font-semibold text-gray-700">
+              {lobs.find(l => l.id === selectedLobId)?.name}</span> during this period:
+            </p>
+            <ul className="mb-5 space-y-1">
+              {existingForLob.map(s => (
+                <li key={s.id} className="text-xs text-amber-700 bg-amber-50 border border-amber-100
+                                          rounded-lg px-3 py-1.5 font-medium">
+                  {s.name}: {fmtDate(s.from)} → {fmtDate(s.to)}
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setOverwriteConfirm(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-500
+                           border border-gray-200 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={runGenerate}
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white
+                           bg-amber-600 hover:bg-amber-500 transition-all"
+              >
+                Yes, overwrite
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   )
