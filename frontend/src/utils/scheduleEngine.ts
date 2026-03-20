@@ -461,11 +461,15 @@ export function computeProjections(
         const intervalLen = settings.intervalFormat === '15 minutes' ? 15 : 30
         const lambdaPm = calls / intervalLen
         const a = lambdaPm / mu
-        // Use actual scheduled counts – shows real delivered SLA after optimization
-        const { pAbandon, slaEst } = erlangAEstimates(a, sched, mu, theta, tSla)
+        // Apply OOO shrinkage to get effective on-phone agents.
+        // The roster inflates headcount by 1/oooFactor so that after absences/training
+        // the net on-phone count equals the Erlang-derived requirement.
+        const oooFactor = 1 - settings.oooShrinkagePct / 100
+        const effectiveSched = Math.max(1, Math.round(sched * oooFactor))
+        const { pAbandon, slaEst } = erlangAEstimates(a, effectiveSched, mu, theta, tSla)
         slaIt = slaEst
         abnIt = pAbandon
-        occIt = Math.min((calls * (settings.ahtSeconds / 60)) / (sched * intervalLen), 1)
+        occIt = Math.min((calls * (settings.ahtSeconds / 60)) / (effectiveSched * intervalLen), 1)
       }
 
       totCalls += calls

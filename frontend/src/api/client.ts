@@ -95,9 +95,9 @@ export const changeLogApi = {
 }
 
 export const userMgmtApi = {
-  list:   ()                   => apiClient.get('/users').then(r => r.data),
-  create: (data: unknown)      => apiClient.post('/users', data).then(r => r.data),
-  remove: (id: string)         => apiClient.delete(`/users/${id}`).then(r => r.data),
+  list:   ()                   => apiClient.get('/auth/sub-users').then(r => r.data),
+  create: (data: unknown)      => apiClient.post('/auth/create-user', data).then(r => r.data),
+  remove: (id: string)         => apiClient.delete(`/auth/sub-users/${id}`).then(r => r.data),
 }
 
 export const channelApi = {
