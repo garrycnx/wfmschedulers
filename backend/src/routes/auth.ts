@@ -244,36 +244,4 @@ router.delete('/sub-users/:id', requireAuth, requireRole('manager', 'admin'), as
   res.json({ success: true })
 })
 
-// POST /api/auth/dev-login – instant preview login (development only, no DB required)
-router.post('/dev-login', (req: Request, res: Response) => {
-  if (process.env.NODE_ENV === 'production') {
-    return res.status(403).json({ error: 'Not available in production' })
-  }
-
-  const PREVIEW_USER = {
-    id: 'preview-manager-1',
-    email: 'gurpreet@wfmclub.com',
-    name: 'Gurpreet Singh',
-    picture: null,
-    role: 'manager',
-    organizationId: 'preview-org-1',
-    createdAt: new Date().toISOString(),
-  }
-
-  const token = jwt.sign(
-    {
-      sub:            PREVIEW_USER.id,
-      email:          PREVIEW_USER.email,
-      name:           PREVIEW_USER.name,
-      role:           PREVIEW_USER.role,
-      organizationId: PREVIEW_USER.organizationId,
-    },
-    process.env.JWT_SECRET!,
-    { expiresIn: '30d' }
-  )
-
-  console.log('[dev-login] Preview login issued for', PREVIEW_USER.email)
-  res.json({ user: PREVIEW_USER, token })
-})
-
 export default router
