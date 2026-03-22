@@ -16,9 +16,13 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
       APP_URL: ${APP_URL}
+      FORECAST_SERVICE_URL: http://forecast-service:8001
     depends_on:
       - db
+      - forecast-service
     restart: unless-stopped
+    networks:
+      - wfm-network
 
   # ── Frontend (served by nginx) ───────────────────────────────────────────────
   frontend:
@@ -34,6 +38,27 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+    networks:
+      - wfm-network
+
+  # ── Forecast Microservice (Python FastAPI) ────────────────────────────────────
+  forecast-service:
+    build:
+      context: ./forecast-service
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - DATA_API_URL=https://bank-api-pnp9.onrender.com/data
+      - DATA_CACHE_TTL_SECONDS=3600
+      - DATA_CACHE_DIR=/app/cache
+      - PORT=8001
+      - DEBUG=false
+    volumes:
+      - forecast-cache:/app/cache
+    restart: unless-stopped
+    networks:
+      - wfm-network
 
   # ── Local SQL Server (for development only) ───────────────────────────────────
   db:
@@ -48,6 +73,13 @@ services:
     volumes:
       - sqldata:/var/opt/mssql
     restart: unless-stopped
+    networks:
+      - wfm-network
 
 volumes:
   sqldata:
+  forecast-cache:
+
+networks:
+  wfm-network:
+    driver: bridge

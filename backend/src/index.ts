@@ -15,6 +15,7 @@ import lobsRouter from './routes/lobs'
 import leaveRouter from './routes/leave'
 import channelsRouter from './routes/channels'
 import changelogRouter from './routes/changelog'
+import forecastRouter from './routes/forecast'
 import { errorHandler } from './middleware/errorHandler'
 
 const app = express()
@@ -47,6 +48,8 @@ app.use('/api/portal',    portalRouter)   // public – no auth required
 app.use('/api',           leaveRouter)      // leave quotas, requests, balances
 app.use('/api',           channelsRouter)  // channel assignments
 app.use('/api',           changelogRouter) // change log
+
+app.use('/api/forecast', forecastRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }))
 

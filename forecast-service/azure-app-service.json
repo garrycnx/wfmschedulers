@@ -1,0 +1,22 @@
+{
+  "name": "wfm-forecast-service",
+  "description": "WFM AI Forecasting Microservice - Python FastAPI",
+  "runtime": "PYTHON|3.11",
+  "sku": "B2",
+  "startup_command": "uvicorn app.main:app --host 0.0.0.0 --port 8000",
+  "health_check_path": "/health",
+  "app_settings": {
+    "DATA_API_URL": "https://bank-api-pnp9.onrender.com/data",
+    "DATA_CACHE_TTL_SECONDS": "3600",
+    "DATA_CACHE_DIR": "/home/site/cache",
+    "PORT": "8000",
+    "DEBUG": "false",
+    "SCM_DO_BUILD_DURING_DEPLOYMENT": "true"
+  },
+  "notes": [
+    "Set AZURE_STORAGE_CONNECTION_STRING for production blob caching",
+    "Set APPLICATIONINSIGHTS_CONNECTION_STRING for monitoring",
+    "Add FORECAST_SERVICE_URL to backend app settings pointing to this service URL",
+    "Recommend B2 or P1V2 tier due to ML model memory requirements"
+  ]
+}

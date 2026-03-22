@@ -14,6 +14,7 @@ import Settings from './pages/Settings'
 import LeaveManagement from './pages/LeaveManagement'
 import UserManagement from './pages/UserManagement'
 import ChangeLog from './pages/ChangeLog'
+import ForecastingPage from './pages/ForecastingPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -58,7 +59,8 @@ export default function App() {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
-        <Route path="generate"  element={<ManagerRoute><ScheduleGenerator /></ManagerRoute>} />
+        <Route path="generate"      element={<ManagerRoute><ScheduleGenerator /></ManagerRoute>} />
+        <Route path="forecasting"   element={<ManagerRoute><ForecastingPage /></ManagerRoute>} />
         <Route path="agents"    element={<AgentManagement />} />
         <Route path="lobs"      element={<ManagerRoute><LobManagement /></ManagerRoute>} />
         <Route path="schedules" element={<ScheduleHistory />} />

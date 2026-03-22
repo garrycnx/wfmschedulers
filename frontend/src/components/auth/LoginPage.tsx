@@ -19,6 +19,9 @@ export default function LoginPage() {
   const [credPassword, setCredPassword] = useState('')
   const [credError, setCredError]   = useState('')
   const [credLoading, setCredLoading] = useState(false)
+  const [devLoading, setDevLoading] = useState(false)
+
+  const isDev = import.meta.env.DEV
 
   useEffect(() => {
     if (isAuthenticated) navigate('/dashboard', { replace: true })
@@ -77,6 +80,20 @@ export default function LoginPage() {
       setCredError('Invalid username or password.')
     } finally {
       setCredLoading(false)
+    }
+  }
+
+  async function handleDevLogin() {
+    setDevLoading(true)
+    try {
+      const res = await apiClient.post<{ user: User; token: string }>('/auth/dev-login', {})
+      setAuth(res.data.user, res.data.token)
+      toast.success(`Preview login — welcome, ${res.data.user.name.split(' ')[0]}!`)
+      navigate('/dashboard', { replace: true })
+    } catch {
+      toast.error('Dev login failed — is the backend running?')
+    } finally {
+      setDevLoading(false)
     }
   }
 
@@ -216,6 +233,35 @@ export default function LoginPage() {
             <span className="text-slate-600 text-xs">or</span>
             <div className="h-px flex-1 bg-white/10" />
           </div>
+
+          {/* Dev Preview Login — only shown in development */}
+          {isDev && (
+            <button
+              onClick={handleDevLogin}
+              disabled={devLoading}
+              className="mt-4 w-full flex items-center justify-center gap-2 border border-dashed border-amber-500/40
+                         bg-amber-500/5 hover:bg-amber-500/10 text-amber-400 hover:text-amber-300
+                         font-medium rounded-xl px-5 py-3 text-sm transition-all disabled:opacity-50"
+            >
+              {devLoading ? (
+                <>
+                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                  Signing in…
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Preview Login (Dev Only)
+                </>
+              )}
+            </button>
+          )}
 
           {/* Agent portal link */}
           <p className="mt-6 text-center text-sm text-slate-500">

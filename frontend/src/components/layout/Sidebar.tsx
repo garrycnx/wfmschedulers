@@ -5,7 +5,7 @@ import {
   LayoutDashboard, CalendarDays, Users, History,
   Settings, LogOut, ChevronLeft, ChevronRight,
   Sparkles, ExternalLink, Briefcase, CalendarOff,
-  Users2,
+  Users2, BarChart2,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 
@@ -16,7 +16,8 @@ interface SidebarProps {
 
 const navItems = [
   { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard',          roles: ['admin', 'manager', 'viewer'] },
-  { to: '/generate',   icon: Sparkles,        label: 'Generate Schedule',  roles: ['admin', 'manager'] },
+  { to: '/generate',     icon: Sparkles,    label: 'Generate Schedule',  roles: ['admin', 'manager'] },
+  { to: '/forecasting', icon: BarChart2,   label: 'Forecasting',         roles: ['admin', 'manager'] },
   { to: '/agents',     icon: Users,           label: 'Agents',             roles: ['admin', 'manager', 'viewer'] },
   { to: '/lobs',       icon: Briefcase,       label: 'Lines of Business',  roles: ['admin', 'manager'] },
   { to: '/schedules',  icon: History,         label: 'Schedule History',   roles: ['admin', 'manager', 'viewer'] },
@@ -51,7 +52,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               <CalendarDays className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-sm font-bold text-gray-900 leading-none">WFM Club</p>
+              <p className="text-sm font-bold text-gray-900 leading-none">FIS WFM Team</p>
               <p className="text-[10px] text-gray-500 mt-0.5">AI Scheduler</p>
             </div>
           </motion.div>
