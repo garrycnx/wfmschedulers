@@ -36,9 +36,22 @@ export default function LoginPage() {
         toast.dismiss(toastId)
         toast.success(`Welcome back, ${res.data.user.name.split(' ')[0]}!`)
         navigate(res.data.user.role === 'agent' ? '/agent-portal' : '/dashboard', { replace: true })
-      } catch {
+      } catch (err: unknown) {
         toast.dismiss(toastId)
-        toast.error('Sign-in failed. Please try again.')
+        // Surface the actual server error so it's easier to diagnose
+        const axiosErr = err as { response?: { data?: { error?: string }; status?: number }; message?: string }
+        const serverMsg = axiosErr?.response?.data?.error
+        const status    = axiosErr?.response?.status
+        const netMsg    = axiosErr?.message
+        if (serverMsg) {
+          toast.error(`Sign-in failed: ${serverMsg}`)
+        } else if (!status) {
+          // No HTTP response at all → backend unreachable
+          toast.error('Cannot reach the server. Is the backend running?')
+        } else {
+          toast.error(`Sign-in failed (${status}). Please try again.`)
+        }
+        console.error('[Auth] /auth/google error', netMsg ?? err)
       }
     },
     onError: () => toast.error('Google sign-in was cancelled.'),
