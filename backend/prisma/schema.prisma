@@ -85,7 +85,6 @@ model Agent {
   lob            LineOfBusiness? @relation(fields: [lobId], references: [id])
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
-  passwordHash   String?                      // portal password (bcrypt)
   userId         String?  @unique             // portal login
   user           User?    @relation(fields: [userId], references: [id])
   createdAt      DateTime @default(now())

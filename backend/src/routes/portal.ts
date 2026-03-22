@@ -7,8 +7,8 @@ const router = Router()
 
 // POST /api/portal/login – agent login (public, no auth required)
 // Body: { agentCode, password? }
-// If the agent has a passwordHash set, password is required and verified.
-// If no passwordHash, access is granted by agentCode alone (legacy / no-password agents).
+// If the agent has a linked User with a passwordHash, password is required and verified.
+// If no linked User / no passwordHash, access is granted by agentCode alone (legacy / no-password agents).
 router.post('/login', async (req: Request, res: Response) => {
   try {
     const { agentCode, password } = req.body as { agentCode?: string; password?: string }
@@ -17,6 +17,7 @@ router.post('/login', async (req: Request, res: Response) => {
     }
     const agent = await prisma.agent.findFirst({
       where: { agentCode: { equals: agentCode.trim().toUpperCase(), mode: 'insensitive' } },
+      include: { user: true },  // include linked User to get passwordHash
     })
     if (!agent) {
       return res.status(404).json({ error: 'Employee ID not found. Please check and try again.' })
@@ -25,12 +26,12 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Your account is inactive. Contact your manager.' })
     }
 
-    // If a password has been set, verify it
-    if (agent.passwordHash) {
+    // If the agent has a linked User with a password, verify it
+    if (agent.user?.passwordHash) {
       if (!password) {
         return res.status(401).json({ error: 'Password is required for your account.' })
       }
-      const valid = await bcrypt.compare(password, agent.passwordHash)
+      const valid = await bcrypt.compare(password, agent.user.passwordHash)
       if (!valid) {
         return res.status(401).json({ error: 'Incorrect password. Please try again.' })
       }
@@ -38,10 +39,11 @@ router.post('/login', async (req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      hasPassword: !!agent.passwordHash,
+      hasPassword: !!agent.user?.passwordHash,
       agent: { id: agent.id, name: agent.name, agentCode: agent.agentCode },
     })
-  } catch {
+  } catch (err) {
+    console.error('/portal/login error', err)
     return res.status(500).json({ error: 'Internal server error.' })
   }
 })
@@ -55,18 +57,47 @@ router.post('/set-password', requireAuth, requireRole('manager', 'admin'), async
       return res.status(400).json({ error: 'agentId and a password of at least 6 characters are required.' })
     }
 
-    // Make sure the agent belongs to the manager's org
-    const agent = await prisma.agent.findUnique({ where: { id: agentId } })
+    const agent = await prisma.agent.findUnique({
+      where: { id: agentId },
+      include: { user: true },
+    })
     if (!agent) return res.status(404).json({ error: 'Agent not found.' })
     if (agent.organizationId !== req.user!.organizationId) {
       return res.status(403).json({ error: 'Forbidden.' })
     }
 
     const passwordHash = await bcrypt.hash(password, 10)
-    await prisma.agent.update({ where: { id: agentId }, data: { passwordHash } })
+
+    if (agent.userId && agent.user) {
+      // Update existing linked User
+      await prisma.user.update({
+        where: { id: agent.userId },
+        data: { passwordHash },
+      })
+    } else {
+      // Create a new User record for this agent and link it
+      const portalEmail = `agent-portal-${agent.agentCode.toLowerCase()}@internal.wfmclub`
+      // Check if a user with this email already exists (e.g. from a previous attempt)
+      let linkedUser = await prisma.user.findUnique({ where: { email: portalEmail } })
+      if (!linkedUser) {
+        linkedUser = await prisma.user.create({
+          data: {
+            email: portalEmail,
+            name: agent.name,
+            role: 'agent',
+            passwordHash,
+            organizationId: agent.organizationId,
+          },
+        })
+      } else {
+        await prisma.user.update({ where: { id: linkedUser.id }, data: { passwordHash } })
+      }
+      await prisma.agent.update({ where: { id: agentId }, data: { userId: linkedUser.id } })
+    }
 
     return res.json({ success: true })
-  } catch {
+  } catch (err) {
+    console.error('/portal/set-password error', err)
     return res.status(500).json({ error: 'Internal server error.' })
   }
 })

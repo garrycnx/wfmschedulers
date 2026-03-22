@@ -25,6 +25,12 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   const agents = await prisma.agent.findMany({
     where: orgId ? { organizationId: orgId } : {},
     orderBy: { createdAt: 'desc' },
+    select: {
+      id: true, agentCode: true, name: true, email: true, phone: true,
+      status: true, skill: true, team: true, hireDate: true,
+      lobId: true, organizationId: true, userId: true,
+      createdAt: true, updatedAt: true,
+    },
   })
   res.json(agents)
 })

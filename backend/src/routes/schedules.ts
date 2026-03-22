@@ -23,10 +23,12 @@ const SaveScheduleSchema = z.object({
   breaksJson: z.string(),
 })
 
-// GET /api/schedules?from=2026-03-01&to=2026-03-31&lobId=xxx
+// GET /api/schedules?from=2026-03-01&to=2026-03-31&lobId=xxx&summary=1
+// summary=1 omits breaksJson (large blob not needed in dashboard list view)
 router.get('/', async (req: AuthRequest, res: Response) => {
   const orgId = req.user!.organizationId
-  const { from, to, lobId } = req.query
+  const { from, to, lobId, summary } = req.query
+  const isSummary = summary === '1' || summary === 'true'
 
   const where: Prisma.ScheduleWhereInput = orgId
     ? { organizationId: orgId }
@@ -44,16 +46,29 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
   if (lobId) where.lobId = lobId as string
 
+  const selectFull = {
+    id: true, name: true, weekStartDate: true, fromDate: true, toDate: true,
+    lobId: true, status: true, createdBy: true, createdAt: true, updatedAt: true,
+    settingsJson: true, forecastJson: true, projectionsJson: true, agentsJson: true,
+    rosterJson: true, requiredJson: true, breaksJson: true,
+  }
+
+  // Summary omits breaksJson — large blob not needed in dashboard list view
+  const selectSummary = {
+    id: true, name: true, weekStartDate: true, fromDate: true, toDate: true,
+    lobId: true, status: true, createdBy: true, createdAt: true, updatedAt: true,
+    settingsJson: true, forecastJson: true, projectionsJson: true, agentsJson: true,
+    rosterJson: true, requiredJson: true,
+  }
+
   const schedules = await prisma.schedule.findMany({
     where,
     orderBy: { createdAt: 'desc' },
-    select: {
-      id: true, name: true, weekStartDate: true, fromDate: true, toDate: true,
-      lobId: true, status: true, createdBy: true, createdAt: true, updatedAt: true,
-      settingsJson: true, forecastJson: true, projectionsJson: true, agentsJson: true,
-      rosterJson: true, requiredJson: true, breaksJson: true,
-    },
+    select: isSummary ? selectSummary : selectFull,
   })
+
+  // Short cache for list views (30 seconds)
+  res.set('Cache-Control', 'private, max-age=30')
   res.json(schedules)
 })
 

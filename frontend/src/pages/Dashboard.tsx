@@ -178,7 +178,7 @@ export default function Dashboard() {
     if (!dateFrom || !dateTo || dateTo < dateFrom) return
     setLoading(true)
     try {
-      const params = new URLSearchParams({ from: dateFrom, to: dateTo })
+      const params = new URLSearchParams({ from: dateFrom, to: dateTo, summary: '1' })
       if (lobId) params.set('lobId', lobId)
       const res = await apiClient.get<DashSchedule[]>(`/schedules?${params}`)
       setSchedules(res.data)
