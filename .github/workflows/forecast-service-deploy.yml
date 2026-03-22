@@ -7,9 +7,6 @@ on:
       - 'forecast-service/**'
   workflow_dispatch:
 
-env:
-  ACR_CONFIGURED: ${{ secrets.ACR_LOGIN_SERVER != '' && secrets.ACR_USERNAME != '' && secrets.ACR_PASSWORD != '' }}
-
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -41,18 +38,33 @@ jobs:
         run: |
           docker build -t forecast-service:${{ github.sha }} .
 
-      # ── Azure deployment (only runs when ACR secrets are configured) ──────────
+      # Check whether ACR secrets are configured (secrets can't be used in if: expressions)
+      - name: Check ACR secrets
+        id: acr
+        run: |
+          if [ -n "$ACR_SERVER" ] && [ -n "$ACR_USER" ] && [ -n "$ACR_PASS" ]; then
+            echo "configured=true" >> $GITHUB_OUTPUT
+          else
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "⚠️  ACR secrets not configured — skipping Docker push and Azure deploy."
+            echo "   Add ACR_LOGIN_SERVER, ACR_USERNAME, ACR_PASSWORD, FORECAST_APP_NAME,"
+            echo "   and FORECAST_PUBLISH_PROFILE to GitHub repository secrets to enable deployment."
+          fi
+        env:
+          ACR_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+          ACR_USER:   ${{ secrets.ACR_USERNAME }}
+          ACR_PASS:   ${{ secrets.ACR_PASSWORD }}
 
       - name: Login to Azure Container Registry
-        if: ${{ secrets.ACR_LOGIN_SERVER != '' && secrets.ACR_USERNAME != '' }}
+        if: steps.acr.outputs.configured == 'true'
         uses: azure/docker-login@v2
         with:
           login-server: ${{ secrets.ACR_LOGIN_SERVER }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+          username:     ${{ secrets.ACR_USERNAME }}
+          password:     ${{ secrets.ACR_PASSWORD }}
 
       - name: Push to ACR
-        if: ${{ secrets.ACR_LOGIN_SERVER != '' && secrets.ACR_USERNAME != '' }}
+        if: steps.acr.outputs.configured == 'true'
         run: |
           docker tag forecast-service:${{ github.sha }} ${{ secrets.ACR_LOGIN_SERVER }}/forecast-service:${{ github.sha }}
           docker tag forecast-service:${{ github.sha }} ${{ secrets.ACR_LOGIN_SERVER }}/forecast-service:latest
@@ -60,16 +72,9 @@ jobs:
           docker push ${{ secrets.ACR_LOGIN_SERVER }}/forecast-service:latest
 
       - name: Deploy to Azure App Service
-        if: ${{ secrets.ACR_LOGIN_SERVER != '' && secrets.FORECAST_PUBLISH_PROFILE != '' }}
+        if: steps.acr.outputs.configured == 'true'
         uses: azure/webapps-deploy@v3
         with:
-          app-name: ${{ secrets.FORECAST_APP_NAME }}
+          app-name:        ${{ secrets.FORECAST_APP_NAME }}
           publish-profile: ${{ secrets.FORECAST_PUBLISH_PROFILE }}
-          images: '${{ secrets.ACR_LOGIN_SERVER }}/forecast-service:${{ github.sha }}'
-
-      - name: Deployment skipped — ACR secrets not configured
-        if: ${{ secrets.ACR_LOGIN_SERVER == '' || secrets.ACR_USERNAME == '' }}
-        run: |
-          echo "⚠️  Azure deployment skipped — add ACR_LOGIN_SERVER, ACR_USERNAME, ACR_PASSWORD,"
-          echo "   FORECAST_APP_NAME, and FORECAST_PUBLISH_PROFILE secrets to enable."
-          echo "   Build and tests passed ✅"
+          images:          '${{ secrets.ACR_LOGIN_SERVER }}/forecast-service:${{ github.sha }}'
