@@ -11,8 +11,10 @@ import toast from 'react-hot-toast'
 import { format, parseISO } from 'date-fns'
 
 import { forecastApi } from '../api/forecastApi'
-import type { ForecastRequest } from '../api/forecastApi'
+import type { ForecastRequest, IntervalDataPoint } from '../api/forecastApi'
 import { useForecastStore } from '../store/forecastStore'
+import { useScheduleStore } from '../store/scheduleStore'
+import type { ForecastRow, Weekday } from '../types'
 import ForecastConfig from '../components/forecasting/ForecastConfig'
 import ForecastChart from '../components/forecasting/ForecastChart'
 import ModelComparisonTable from '../components/forecasting/ModelComparisonTable'
@@ -106,6 +108,7 @@ function EmptyState() {
 export default function ForecastingPage() {
   const navigate = useNavigate()
   const store = useForecastStore()
+  const scheduleStore = useScheduleStore()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
 
   const result = store.result
@@ -139,20 +142,55 @@ export default function ForecastingPage() {
   }
 
   const handleUseInScheduler = () => {
-    if (!result) return
-    localStorage.setItem('forecast_result', JSON.stringify(result))
-    // Also create a WFM-compatible forecast CSV format for the schedule generator
-    if (result.interval_data?.length) {
-      const csvRows = result.interval_data.map(d => ({
-        date: d.date,
-        day_of_week: d.dayOfWeek,
-        time: d.time,
-        calls: Math.round(d.calls),
-      }))
-      localStorage.setItem('forecast_interval_csv', JSON.stringify(csvRows))
+    if (!result?.interval_data?.length) return
+
+    // Convert IntervalDataPoint[] → ForecastRow[] (aggregate avg by weekday + slot)
+    const DOW_MAP: Record<string, Weekday> = {
+      Monday: 'Mon', Tuesday: 'Tue', Wednesday: 'Wed', Thursday: 'Thu',
+      Friday: 'Fri', Saturday: 'Sat', Sunday: 'Sun',
     }
-    toast.success('Forecast saved — opening Schedule Generator')
-    navigate('/generate')
+
+    const agg = new Map<string, { sum: number; count: number }>()
+    for (const pt of result.interval_data as IntervalDataPoint[]) {
+      const wd = DOW_MAP[pt.dayOfWeek]
+      if (!wd) continue
+      const [h, m] = pt.time.split(':').map(Number)
+      const slotMin = h * 60 + m
+      const key = `${wd}|${slotMin}`
+      const existing = agg.get(key) ?? { sum: 0, count: 0 }
+      agg.set(key, { sum: existing.sum + pt.calls, count: existing.count + 1 })
+    }
+
+    const forecastRows: ForecastRow[] = []
+    for (const [key, { sum, count }] of agg.entries()) {
+      const [wd, slotStr] = key.split('|')
+      const slotMin = parseInt(slotStr)
+      const h = Math.floor(slotMin / 60)
+      const mm = slotMin % 60
+      forecastRows.push({
+        weekday: wd as Weekday,
+        slotMin,
+        slotLabel: `${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}`,
+        volume: Math.round(sum / count),
+      })
+    }
+
+    // Update intervalFormat in schedule settings to match forecast granularity
+    const intervalFormat = result.intervalMinutes === 15 ? '15 minutes' : '30 minutes'
+    scheduleStore.updateSettings({ intervalFormat })
+
+    // Pre-load into schedule store and navigate directly to step 2
+    scheduleStore.setForecast(forecastRows)
+    localStorage.setItem('forecast_source', JSON.stringify({
+      from: result.startDate,
+      to: result.endDate,
+      model: result.model_results[result.best_model]?.model_display_name ?? result.best_model,
+      intervals: forecastRows.length,
+      intervalMinutes: result.intervalMinutes,
+    }))
+
+    toast.success(`Forecast loaded — ${forecastRows.length} intervals across 7 days`)
+    navigate('/generate?fromForecast=1')
   }
 
   const handleExport = (fmt: 'csv' | 'json' | 'excel') => {
@@ -215,7 +253,7 @@ export default function ForecastingPage() {
                   <FileText className="w-3.5 h-3.5" />Excel
                 </button>
                 <button onClick={handleUseInScheduler} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition-colors shadow-sm">
-                  <Download className="w-3.5 h-3.5" />Use in Scheduler<ArrowRight className="w-3.5 h-3.5" />
+                  <ArrowRight className="w-3.5 h-3.5" />Create Schedule<ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}
@@ -415,11 +453,11 @@ export default function ForecastingPage() {
                   <div>
                     <h3 className="text-sm font-semibold text-white">Ready to build your schedule?</h3>
                     <p className="text-xs text-white/70 mt-0.5">
-                      Send this {result.intervalMinutes ?? 30}-min interval forecast to the Schedule Generator to auto-size staffing.
+                      Loads this {result.intervalMinutes ?? 15}-min forecast directly into the Schedule Generator — skips upload, goes straight to configuration.
                     </p>
                   </div>
                   <button onClick={handleUseInScheduler} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-indigo-700 text-sm font-semibold hover:bg-indigo-50 transition-colors shadow-sm shrink-0">
-                    Use This Forecast in Scheduler<ArrowRight className="w-4 h-4" />
+                    Create Schedule with This Forecast<ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>

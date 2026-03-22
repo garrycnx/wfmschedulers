@@ -1,4 +1,5 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import Papa from 'papaparse'
@@ -26,7 +27,7 @@ import type { ForecastRow, Weekday } from '../types'
 import { WEEKDAYS } from '../types'
 
 const STEPS = [
-  { id: 1, label: 'Upload Forecast' },
+  { id: 1, label: 'Forecast' },
   { id: 2, label: 'Configure Settings' },
   { id: 3, label: 'Review Required Staff' },
   { id: 4, label: 'Generated Roster' },
@@ -41,7 +42,17 @@ function fmtDate(iso: string) {
 export default function ScheduleGenerator() {
   const store = useScheduleStore()
   const { lobs, fetchLobs } = useLobStore()
-  const [currentStep, setCurrentStep] = useState(1)
+  const [searchParams] = useSearchParams()
+
+  // Detect if we arrived from the Forecasting module with pre-loaded data
+  const fromForecast = searchParams.get('fromForecast') === '1'
+  const forecastSource = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem('forecast_source') ?? 'null') } catch { return null }
+  }, [])
+
+  const [currentStep, setCurrentStep] = useState(() =>
+    fromForecast && store.forecastRows.length > 0 ? 2 : 1
+  )
   const [isGenerating, setIsGenerating] = useState(false)
   const [selectedLobId, setSelectedLobId] = useState<string>('')
   const [scheduleFrom, setScheduleFrom] = useState(() => new Date().toISOString().split('T')[0])
@@ -255,9 +266,51 @@ export default function ScheduleGenerator() {
         </div>
       </div>
 
-      {/* Step 1 – Upload */}
+      {/* Step 1 – Upload or AI Forecast banner */}
       {currentStep === 1 && (
-        <ForecastUpload onParsed={handleForecastParsed} settings={store.settings} />
+        fromForecast && store.forecastRows.length > 0 ? (
+          <div className="max-w-2xl mx-auto space-y-4">
+            {/* AI Forecast loaded banner */}
+            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-6 text-white">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                  <Check className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-bold">AI Forecast Loaded</h3>
+                  <p className="text-xs text-white/80 mt-1">
+                    {forecastSource
+                      ? `${forecastSource.intervals} intervals · ${forecastSource.intervalMinutes}-min · ${forecastSource.model} · ${forecastSource.from} → ${forecastSource.to}`
+                      : `${store.forecastRows.length} interval rows loaded from Forecasting module`
+                    }
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setCurrentStep(2)}
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand-600
+                           hover:bg-brand-500 text-white font-semibold text-sm transition-all shadow-glow-sm"
+              >
+                Continue to Configuration <ChevronRight className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => { store.setForecast([]); localStorage.removeItem('forecast_source') }}
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-gray-200
+                           text-gray-600 font-medium text-sm hover:bg-gray-50 transition-all"
+              >
+                Replace with CSV Upload
+              </button>
+            </div>
+            {/* Show upload below as fallback */}
+            {store.forecastRows.length === 0 && (
+              <ForecastUpload onParsed={handleForecastParsed} settings={store.settings} />
+            )}
+          </div>
+        ) : (
+          <ForecastUpload onParsed={handleForecastParsed} settings={store.settings} />
+        )
       )}
 
       {/* Step 2 – Settings */}
