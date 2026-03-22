@@ -19,11 +19,16 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
-// Handle 401 (token expired)
+// Handle 401 (token expired) – but NOT during login/auth requests themselves,
+// otherwise a wrong-password attempt would fire a "Session expired" redirect
+// instead of showing the actual error to the user.
 apiClient.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    const url: string = err.config?.url ?? ''
+    const isAuthCall = url.includes('/auth/') || url.includes('/portal/login')
+    const isLoggedIn = !!useAuthStore.getState().token
+    if (err.response?.status === 401 && !isAuthCall && isLoggedIn) {
       useAuthStore.getState().logout()
       window.location.href = '/login'
       toast.error('Session expired. Please sign in again.')

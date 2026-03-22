@@ -7,13 +7,8 @@ declare global {
 }
 
 export const prisma = globalThis.__prisma ?? new PrismaClient({
-  // Only log errors in all environments — query logging is very slow
+  // Only log errors — query logging is very slow
   log: ['error'],
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL,
-    },
-  },
 })
 
 if (process.env.NODE_ENV !== 'production') globalThis.__prisma = prisma

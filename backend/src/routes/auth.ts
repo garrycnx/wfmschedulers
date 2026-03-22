@@ -90,7 +90,7 @@ router.post('/google', async (req: Request, res: Response) => {
     })
   } catch (err) {
     console.error('/auth/google error', err)
-    res.status(401).json({ error: 'Authentication failed' })
+    res.status(500).json({ error: 'Authentication failed' })
   }
 })
 
@@ -175,11 +175,11 @@ router.post('/user-login', async (req: Request, res: Response) => {
 
     const user = await prisma.user.findUnique({ where: { username } })
     if (!user || !user.passwordHash) {
-      return res.status(401).json({ error: 'Invalid username or password' })
+      return res.status(400).json({ error: 'Invalid username or password' })
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash)
-    if (!valid) return res.status(401).json({ error: 'Invalid username or password' })
+    if (!valid) return res.status(400).json({ error: 'Invalid username or password' })
 
     const token = jwt.sign(
       { sub: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId },
@@ -209,7 +209,7 @@ router.post('/user-login', async (req: Request, res: Response) => {
     })
   } catch (err) {
     console.error('/auth/user-login error', err)
-    res.status(401).json({ error: 'Authentication failed' })
+    res.status(500).json({ error: 'Server error. Please try again.' })
   }
 })
 
