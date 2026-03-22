@@ -455,8 +455,11 @@ export function computeProjections(
 
       let slaIt: number; let abnIt: number; let occIt: number
 
-      if (sched === 0) {
-        slaIt = 0; abnIt = calls > 0 ? 1 : 0; occIt = 0
+      if (calls === 0) {
+        // No forecast volume — skip; doesn't affect day-level SLA/abandon/occ
+        slaIt = 1; abnIt = 0; occIt = 0
+      } else if (sched === 0) {
+        slaIt = 0; abnIt = 1; occIt = 0
       } else {
         const intervalLen = settings.intervalFormat === '15 minutes' ? 15 : 30
         const lambdaPm = calls / intervalLen

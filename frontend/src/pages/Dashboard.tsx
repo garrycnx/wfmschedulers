@@ -192,16 +192,22 @@ export default function Dashboard() {
   useEffect(() => { fetchSchedules() }, [fetchSchedules])
 
   // ── Parsed schedule data ─────────────────────────────────────────
-  const parsed = useMemo(() => schedules.map(s => ({
-    ...s,
-    range:        getScheduleRange(s),
-    slotAgents:   JSON.parse(s.agentsJson)      as SlotAgent[],
-    roster:       JSON.parse(s.rosterJson)      as RosterRow[],
-    projections:  JSON.parse(s.projectionsJson) as DayProjection[],
-    required:     JSON.parse(s.requiredJson)    as RequiredRow[],
-    forecastRows: JSON.parse(s.forecastJson || '[]') as ForecastRow[],
-    schedSettings:JSON.parse(s.settingsJson)    as SchedSettings,
-  })), [schedules])
+  const parsed = useMemo(() => schedules.flatMap(s => {
+    try {
+      return [{
+        ...s,
+        range:        getScheduleRange(s),
+        slotAgents:   JSON.parse(s.agentsJson      || '[]') as SlotAgent[],
+        roster:       JSON.parse(s.rosterJson       || '[]') as RosterRow[],
+        projections:  JSON.parse(s.projectionsJson  || '[]') as DayProjection[],
+        required:     JSON.parse(s.requiredJson     || '[]') as RequiredRow[],
+        forecastRows: JSON.parse(s.forecastJson     || '[]') as ForecastRow[],
+        schedSettings:JSON.parse(s.settingsJson     || '{}') as SchedSettings,
+      }]
+    } catch {
+      return []   // skip schedules with corrupt JSON rather than crashing
+    }
+  }), [schedules])
 
   // ── KPIs ─────────────────────────────────────────────────────────
   const uniqueAgentIds = useMemo(() => {

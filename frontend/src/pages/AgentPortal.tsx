@@ -467,12 +467,14 @@ export default function AgentPortal() {
     e.preventDefault()
     setLoginError('')
     if (!empId.trim()) { setLoginError('Employee ID is required.'); return }
-    if (!password)     { setLoginError('Password is required.'); return }
 
     setIsLoggingIn(true)
     try {
-      // Step 1: Verify agent code against backend
-      const loginRes = await axios.post(`${PORTAL_API}/login`, { agentCode: empId.trim() })
+      // Step 1: Verify agent code + password against backend
+      const loginRes = await axios.post(`${PORTAL_API}/login`, {
+        agentCode: empId.trim(),
+        password: password || undefined,
+      })
       const { agent } = loginRes.data
 
       // Step 2: Fetch the released schedule for this agent

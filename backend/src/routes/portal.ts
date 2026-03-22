@@ -1,12 +1,17 @@
 import { Router, Request, Response } from 'express'
+import bcrypt from 'bcryptjs'
 import { prisma } from '../config/database'
+import { requireAuth, requireRole, AuthRequest } from '../middleware/auth'
 
 const router = Router()
 
 // POST /api/portal/login – agent login (public, no auth required)
+// Body: { agentCode, password? }
+// If the agent has a passwordHash set, password is required and verified.
+// If no passwordHash, access is granted by agentCode alone (legacy / no-password agents).
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { agentCode } = req.body as { agentCode?: string }
+    const { agentCode, password } = req.body as { agentCode?: string; password?: string }
     if (!agentCode?.trim()) {
       return res.status(400).json({ error: 'Employee ID is required.' })
     }
@@ -19,7 +24,48 @@ router.post('/login', async (req: Request, res: Response) => {
     if (agent.status === 'inactive') {
       return res.status(403).json({ error: 'Your account is inactive. Contact your manager.' })
     }
-    return res.json({ success: true, agent: { id: agent.id, name: agent.name, agentCode: agent.agentCode } })
+
+    // If a password has been set, verify it
+    if (agent.passwordHash) {
+      if (!password) {
+        return res.status(401).json({ error: 'Password is required for your account.' })
+      }
+      const valid = await bcrypt.compare(password, agent.passwordHash)
+      if (!valid) {
+        return res.status(401).json({ error: 'Incorrect password. Please try again.' })
+      }
+    }
+
+    return res.json({
+      success: true,
+      hasPassword: !!agent.passwordHash,
+      agent: { id: agent.id, name: agent.name, agentCode: agent.agentCode },
+    })
+  } catch {
+    return res.status(500).json({ error: 'Internal server error.' })
+  }
+})
+
+// POST /api/portal/set-password – manager sets/resets an agent's portal password
+// Body: { agentId, password }
+router.post('/set-password', requireAuth, requireRole('manager', 'admin'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { agentId, password } = req.body as { agentId?: string; password?: string }
+    if (!agentId || !password || password.length < 6) {
+      return res.status(400).json({ error: 'agentId and a password of at least 6 characters are required.' })
+    }
+
+    // Make sure the agent belongs to the manager's org
+    const agent = await prisma.agent.findUnique({ where: { id: agentId } })
+    if (!agent) return res.status(404).json({ error: 'Agent not found.' })
+    if (agent.organizationId !== req.user!.organizationId) {
+      return res.status(403).json({ error: 'Forbidden.' })
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10)
+    await prisma.agent.update({ where: { id: agentId }, data: { passwordHash } })
+
+    return res.json({ success: true })
   } catch {
     return res.status(500).json({ error: 'Internal server error.' })
   }

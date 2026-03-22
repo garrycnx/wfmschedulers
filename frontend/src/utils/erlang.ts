@@ -22,6 +22,7 @@ function lgamma(x: number): number {
 
 /** Erlang-C waiting probability P(wait > 0) */
 export function erlangCPw(a: number, c: number): number {
+  if (a <= 0) return 0   // no traffic → no waiting
   if (c <= a) return 1.0
 
   let logSum = -Infinity
@@ -65,6 +66,7 @@ export function erlangAEstimates(
   theta: number,
   tSlaMin: number,
 ): ErlangAResult {
+  if (a <= 0) return { pw: 0, pWaitGtT: 0, pAbandon: 0, slaEst: 1 }  // no traffic
   if (c <= a) return { pw: 1, pWaitGtT: 1, pAbandon: 1, slaEst: 0 }
 
   const pw = erlangCPw(a, c)
