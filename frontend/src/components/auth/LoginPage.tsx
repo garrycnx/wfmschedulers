@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useGoogleLogin } from '@react-oauth/google'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
-import axios from 'axios'
 import { useAuthStore } from '../../store/authStore'
 import { apiClient } from '../../api/client'
 import type { User } from '../../types'
@@ -38,23 +37,8 @@ export default function LoginPage() {
         toast.success(`Welcome back, ${res.data.user.name.split(' ')[0]}!`)
         navigate(res.data.user.role === 'agent' ? '/agent-portal' : '/dashboard', { replace: true })
       } catch {
-        try {
-          const profile = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
-            headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-          })
-          const g = profile.data as { id: string; email: string; name: string; picture: string }
-          const user: User = {
-            id: g.id, email: g.email, name: g.name, picture: g.picture,
-            role: 'manager', createdAt: new Date().toISOString(),
-          }
-          setAuth(user, `demo-token-${g.id}`)
-          toast.dismiss(toastId)
-          toast.success(`Welcome, ${g.name.split(' ')[0]}!`)
-          navigate('/dashboard', { replace: true })
-        } catch {
-          toast.dismiss(toastId)
-          toast.error('Sign-in failed. Please try again.')
-        }
+        toast.dismiss(toastId)
+        toast.error('Sign-in failed. Please try again.')
       }
     },
     onError: () => toast.error('Google sign-in was cancelled.'),
