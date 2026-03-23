@@ -6,6 +6,7 @@ import Papa from 'papaparse'
 import { Check, ChevronRight, Loader2, Send, Unlock, Lock, AlertTriangle } from 'lucide-react'
 import { useScheduleStore } from '../store/scheduleStore'
 import { useLobStore } from '../store/lobStore'
+import { useAgentStore } from '../store/agentStore'
 import { schedulesApi, apiClient } from '../api/client'
 import SettingsPanel from '../components/scheduling/SettingsPanel'
 import ForecastUpload from '../components/scheduling/ForecastUpload'
@@ -42,6 +43,7 @@ function fmtDate(iso: string) {
 export default function ScheduleGenerator() {
   const store = useScheduleStore()
   const { lobs, fetchLobs } = useLobStore()
+  const { fetchAgents } = useAgentStore()
   const [searchParams] = useSearchParams()
 
   // Detect if we arrived from the Forecasting module with pre-loaded data
@@ -68,6 +70,7 @@ export default function ScheduleGenerator() {
   const [overwriteConfirm, setOverwriteConfirm] = useState(false)
 
   useEffect(() => { fetchLobs() }, [])
+  useEffect(() => { fetchAgents() }, []) // ensure agents are loaded for roster dropdown
 
   // Check for existing schedules whenever LOB or date range changes
   useEffect(() => {

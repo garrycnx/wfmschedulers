@@ -70,7 +70,7 @@ async function fetch15MinData(): Promise<IntervalRecord15[] | null> {
   try {
     const { data } = await axios.get<IntervalRecord15[]>(
       'https://bank-api-pnp9.onrender.com/data/15min',
-      { timeout: 15000 }
+      { timeout: 50000 }
     )
     if (Array.isArray(data) && data.length > 0) return data
     return null
@@ -106,7 +106,7 @@ async function fetchHistoricalData(): Promise<DailyRecord[]> {
   // Fall back to daily endpoint
   const { data } = await axios.get<Array<{ date: string; total_calls: number }>>(
     'https://bank-api-pnp9.onrender.com/data',
-    { timeout: 15000 }
+    { timeout: 50000 }
   )
   const records = data
     .map(d => ({ date: new Date(d.date), calls: Number(d.total_calls) || 0 }))
@@ -596,7 +596,7 @@ router.get('/history', requireAuth, async (req: Request, res: Response) => {
       // Fallback: fetch directly from bank API
       try {
         const { data } = await axios.get<Array<{ date: string; total_calls: number }>>(
-          'https://bank-api-pnp9.onrender.com/data', { timeout: 15000 }
+          'https://bank-api-pnp9.onrender.com/data', { timeout: 50000 }
         )
         const daysNum = days ? parseInt(days) : 90
         const sorted = data.sort((a, b) => a.date.localeCompare(b.date)).slice(-daysNum)
