@@ -11,13 +11,14 @@ import rateLimit from 'express-rate-limit'
 // Running here (inside the App Service) works even when the DB is VNet-private.
 try {
   console.log('⏳  Syncing database schema...')
-  execSync('node node_modules/.bin/prisma db push --skip-generate', {
+  execSync('npx prisma db push --skip-generate', {
     stdio: 'inherit',
     env: { ...process.env },
+    cwd: __dirname,
   })
   console.log('✅  Database schema in sync.')
 } catch (e) {
-  console.error('⚠️  prisma db push failed – continuing startup anyway:', e)
+  console.error('⚠️  prisma db push failed – continuing startup anyway:', (e as Error).message)
 }
 
 import authRouter from './routes/auth'
