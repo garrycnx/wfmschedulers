@@ -1,10 +1,24 @@
 import 'dotenv/config'
+import { execSync } from 'child_process'
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import compression from 'compression'
 import morgan from 'morgan'
 import rateLimit from 'express-rate-limit'
+
+// Sync Prisma schema to the database on startup.
+// Running here (inside the App Service) works even when the DB is VNet-private.
+try {
+  console.log('⏳  Syncing database schema...')
+  execSync('node node_modules/.bin/prisma db push --skip-generate', {
+    stdio: 'inherit',
+    env: { ...process.env },
+  })
+  console.log('✅  Database schema in sync.')
+} catch (e) {
+  console.error('⚠️  prisma db push failed – continuing startup anyway:', e)
+}
 
 import authRouter from './routes/auth'
 import agentsRouter from './routes/agents'
