@@ -6,6 +6,19 @@ import { v4 as uuidv4 } from 'uuid'
 const router = Router()
 const FORECAST_URL = process.env.FORECAST_SERVICE_URL || 'http://localhost:8001'
 
+// Simple in-memory cache for historical data (refreshed every hour)
+let histDataCache: { data: Array<{ date: Date; calls: number }>; fetchedAt: number } | null = null
+const HIST_CACHE_TTL = 60 * 60 * 1000 // 1 hour
+
+async function getCachedHistoricalData() {
+  if (histDataCache && Date.now() - histDataCache.fetchedAt < HIST_CACHE_TTL) {
+    return histDataCache.data
+  }
+  const data = await fetchHistoricalData()
+  histDataCache = { data, fetchedAt: Date.now() }
+  return data
+}
+
 // ─── Banking call center 15-min interval distribution ─────────────────────
 // Each entry: [time_label, pct_of_daily_volume]
 // Represents a typical banking contact center (8:00 AM – 7:45 PM, 48 slots)
@@ -456,6 +469,7 @@ async function generateFallbackForecast(body: {
   startDate: string
   endDate: string
   intervalMinutes?: number
+  historicalDays?: number
 }): Promise<object> {
   const start = parseDateSafe(body.startDate)
   const end = parseDateSafe(body.endDate)
@@ -465,7 +479,11 @@ async function generateFallbackForecast(body: {
   const horizon = Math.max(1, Math.round(diffMs / 86400000) + 1)
 
   console.log('[forecast-fallback] Fetching historical data...')
-  const history = await fetchHistoricalData()
+  const allHistory = await getCachedHistoricalData()
+  // Apply user-selected historical window (default: all available data)
+  const history = body.historicalDays && body.historicalDays > 0
+    ? allHistory.slice(-body.historicalDays)
+    : allHistory
   if (history.length < 30) throw new Error('Insufficient historical data for forecasting')
 
   console.log(`[forecast-fallback] Generating ${horizon}-day forecast (${intervalMinutes}-min intervals)`)
@@ -482,8 +500,8 @@ async function generateFallbackForecast(body: {
   const seasonality = detectSeasonality(history)
   const insights = buildInsights(history, dailyForecast)
 
-  // Historical data: last 90 days
-  const historicalData = history.slice(-90).map(r => ({
+  // Historical data: show all records used for training
+  const historicalData = history.map(r => ({
     date: dateToString(r.date),
     value: r.calls,
     is_forecast: false,
@@ -544,6 +562,23 @@ router.get('/models', requireAuth, async (req: Request, res: Response) => {
         ],
       })
     } else { handleProxyError(err, res) }
+  }
+})
+
+// GET /historical-range — returns the date range & total days of available historical data
+router.get('/historical-range', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const history = await getCachedHistoricalData()
+    if (!history.length) {
+      res.status(503).json({ error: 'No historical data available' })
+      return
+    }
+    const minDate = history[0].date.toISOString().split('T')[0]
+    const maxDate = history[history.length - 1].date.toISOString().split('T')[0]
+    const totalDays = history.length
+    res.json({ minDate, maxDate, totalDays })
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load historical data range', detail: (err as Error).message })
   }
 })
 

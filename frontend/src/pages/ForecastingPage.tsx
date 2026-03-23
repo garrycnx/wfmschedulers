@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -11,7 +11,7 @@ import toast from 'react-hot-toast'
 import { format, parseISO } from 'date-fns'
 
 import { forecastApi } from '../api/forecastApi'
-import type { ForecastRequest, IntervalDataPoint } from '../api/forecastApi'
+import type { ForecastRequest, IntervalDataPoint, HistoricalRange } from '../api/forecastApi'
 import { useForecastStore } from '../store/forecastStore'
 import { useScheduleStore } from '../store/scheduleStore'
 import type { ForecastRow, Weekday } from '../types'
@@ -110,6 +110,14 @@ export default function ForecastingPage() {
   const store = useForecastStore()
   const scheduleStore = useScheduleStore()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
+  const [historicalRange, setHistoricalRange] = useState<HistoricalRange | null>(null)
+
+  // Fetch available historical data range on mount
+  useEffect(() => {
+    forecastApi.getHistoricalRange()
+      .then(setHistoricalRange)
+      .catch(() => { /* non-critical — UI degrades gracefully */ })
+  }, [])
 
   const result = store.result
   const isLoading = store.isLoading
@@ -267,7 +275,7 @@ export default function ForecastingPage() {
           {/* Left: Config */}
           <div className="w-full xl:w-80 shrink-0">
             <div className="xl:sticky xl:top-6">
-              <ForecastConfig onGenerate={handleGenerate} isLoading={isLoading} />
+              <ForecastConfig onGenerate={handleGenerate} isLoading={isLoading} historicalRange={historicalRange} />
             </div>
           </div>
 

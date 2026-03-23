@@ -8,6 +8,13 @@ export interface ForecastRequest {
   models: Array<'prophet' | 'arima' | 'ets' | 'lstm' | 'ensemble'>
   confidence_intervals: number[]
   intervalMinutes: 15 | 30
+  historicalDays?: number       // how many days of history to train on (undefined = all)
+}
+
+export interface HistoricalRange {
+  minDate: string    // "2025-10-03"
+  maxDate: string    // "2026-03-23"
+  totalDays: number  // 172
 }
 
 export interface ForecastPoint {
@@ -133,6 +140,11 @@ export const forecastApi = {
 
   refreshCache: async () => {
     const { data } = await apiClient.post(`${FORECAST_BASE}/refresh-cache`)
+    return data
+  },
+
+  getHistoricalRange: async (): Promise<HistoricalRange> => {
+    const { data } = await apiClient.get(`${FORECAST_BASE}/historical-range`, { timeout: 55000 })
     return data
   },
 }

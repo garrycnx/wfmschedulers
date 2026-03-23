@@ -1,16 +1,25 @@
 import { useState, useMemo } from 'react'
-import { Zap, Settings2, RefreshCw, ChevronRight, Info, Calendar } from 'lucide-react'
+import { Zap, Settings2, RefreshCw, ChevronRight, Info, Calendar, Database } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
-import { format, addDays, differenceInDays, parseISO } from 'date-fns'
-import type { ForecastRequest } from '../../api/forecastApi'
+import { format, addDays, subDays, differenceInDays, parseISO } from 'date-fns'
+import type { ForecastRequest, HistoricalRange } from '../../api/forecastApi'
 import { forecastApi } from '../../api/forecastApi'
 import { useForecastStore } from '../../store/forecastStore'
 
 interface ForecastConfigProps {
   onGenerate: (req: ForecastRequest) => void
   isLoading: boolean
+  historicalRange?: HistoricalRange | null
 }
+
+const HIST_PRESETS = [
+  { label: '30d',  days: 30 },
+  { label: '90d',  days: 90 },
+  { label: '6m',   days: 180 },
+  { label: '1y',   days: 365 },
+  { label: 'All',  days: 0 },   // 0 = all available
+]
 
 const PRESETS = [
   { label: '7d',  days: 7 },
@@ -28,7 +37,7 @@ const MODEL_OPTIONS = [
   { id: 'ensemble' as const, label: 'Ensemble', color: '#8b5cf6', description: 'Weighted MA ensemble with DOW trend — fast, reliable, always available.' },
 ]
 
-export default function ForecastConfig({ onGenerate, isLoading }: ForecastConfigProps) {
+export default function ForecastConfig({ onGenerate, isLoading, historicalRange }: ForecastConfigProps) {
   const store = useForecastStore()
   const todayStr = format(new Date(), 'yyyy-MM-dd')
   const [startDate, setStartDate] = useState(store.defaultStartDate)
@@ -38,6 +47,8 @@ export default function ForecastConfig({ onGenerate, isLoading }: ForecastConfig
   const [ciLevel, setCiLevel] = useState<'0.80' | '0.95'>(store.activeCI)
   const [tooltip, setTooltip] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  // 0 = all available data; positive number = last N days
+  const [historicalDays, setHistoricalDays] = useState<number>(0)
 
   const dayCount = useMemo(() => {
     try { return differenceInDays(parseISO(endDate), parseISO(startDate)) + 1 }
@@ -69,6 +80,19 @@ export default function ForecastConfig({ onGenerate, isLoading }: ForecastConfig
     })
   }
 
+  // Compute the effective historical training window for display
+  const effectiveHistDays = useMemo(() => {
+    if (!historicalRange) return historicalDays || 90
+    const available = historicalRange.totalDays
+    return historicalDays === 0 ? available : Math.min(historicalDays, available)
+  }, [historicalDays, historicalRange])
+
+  const histTrainingStart = useMemo(() => {
+    if (!historicalRange) return null
+    const maxDate = parseISO(historicalRange.maxDate)
+    return format(subDays(maxDate, effectiveHistDays - 1), 'MMM d, yyyy')
+  }, [historicalRange, effectiveHistDays])
+
   const handleGenerate = () => {
     if (dateError) { toast.error(dateError); return }
     if (selectedModels.length === 0) { toast.error('Select at least one model'); return }
@@ -76,7 +100,13 @@ export default function ForecastConfig({ onGenerate, isLoading }: ForecastConfig
     store.setDefaultModels(selectedModels)
     store.setActiveCI(ciLevel)
     const ciValues = ciLevel === '0.80' ? [0.80] : [0.80, 0.95]
-    onGenerate({ startDate, endDate, models: selectedModels, confidence_intervals: ciValues, intervalMinutes })
+    onGenerate({
+      startDate, endDate,
+      models: selectedModels,
+      confidence_intervals: ciValues,
+      intervalMinutes,
+      historicalDays: historicalDays === 0 ? undefined : historicalDays,
+    })
   }
 
   const handleRefreshCache = async () => {
@@ -154,6 +184,61 @@ export default function ForecastConfig({ onGenerate, isLoading }: ForecastConfig
           )}
         </div>
 
+        {/* Historical Training Data */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Database className="w-3.5 h-3.5 text-gray-400" />
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Historical Training Data</label>
+          </div>
+
+          {/* Available range banner */}
+          {historicalRange ? (
+            <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 mb-3">
+              <p className="text-xs text-indigo-700 font-medium">
+                Data available: {format(parseISO(historicalRange.minDate), 'MMM d, yyyy')} – {format(parseISO(historicalRange.maxDate), 'MMM d, yyyy')}
+              </p>
+              <p className="text-xs text-indigo-500 mt-0.5">{historicalRange.totalDays} days total</p>
+            </div>
+          ) : (
+            <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 mb-3 animate-pulse">
+              <div className="h-3 bg-gray-200 rounded w-3/4 mb-1" />
+              <div className="h-3 bg-gray-200 rounded w-1/3" />
+            </div>
+          )}
+
+          {/* Quick presets */}
+          <div className="flex gap-1.5 flex-wrap mb-2">
+            {HIST_PRESETS.map(p => {
+              const isActive = historicalDays === p.days
+              const exceedsAvailable = historicalRange && p.days > 0 && p.days > historicalRange.totalDays
+              return (
+                <button
+                  key={p.label}
+                  disabled={!!exceedsAvailable}
+                  onClick={() => setHistoricalDays(p.days)}
+                  className={clsx(
+                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors',
+                    isActive
+                      ? 'bg-indigo-600 text-white'
+                      : exceedsAvailable
+                        ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                        : 'bg-gray-100 text-gray-600 hover:bg-indigo-100 hover:text-indigo-700',
+                  )}
+                >
+                  {p.label}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Effective range display */}
+          {historicalRange && histTrainingStart && (
+            <p className="text-xs text-emerald-600 font-medium">
+              ✓ Training on: {histTrainingStart} – {format(parseISO(historicalRange.maxDate), 'MMM d, yyyy')} ({effectiveHistDays} days)
+            </p>
+          )}
+        </div>
+
         {/* Models */}
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Forecasting Models</label>
@@ -224,7 +309,8 @@ export default function ForecastConfig({ onGenerate, isLoading }: ForecastConfig
         {/* Summary */}
         <div className="bg-gray-50 rounded-xl p-3 space-y-1.5 text-xs">
           <p className="font-semibold text-gray-500">Run Summary</p>
-          <div className="flex justify-between text-gray-600"><span>Date Range</span><span className="font-medium">{dayCount} days</span></div>
+          <div className="flex justify-between text-gray-600"><span>Forecast Range</span><span className="font-medium">{dayCount} days</span></div>
+          <div className="flex justify-between text-gray-600"><span>Training Data</span><span className="font-medium">{effectiveHistDays} days</span></div>
           <div className="flex justify-between text-gray-600"><span>Granularity</span><span className="font-medium">{intervalMinutes}-min slots</span></div>
           <div className="flex justify-between text-gray-600"><span>Models</span><span className="font-medium">{selectedModels.length} selected</span></div>
           <div className="flex justify-between text-gray-600"><span>CI Level</span><span className="font-medium">{ciLevel === '0.80' ? '80%' : '80% + 95%'}</span></div>
